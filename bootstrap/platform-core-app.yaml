@@ -1,0 +1,20 @@
+piVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-core
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: "https://gitlab.am.micube.dev/daegu-tp/mfg-data-platform/gitops/platform-infra.git"
+    targetRevision: HEAD
+    path: manifests # DB, 보안 등 인프라 설정 폴더를 바라봄
+    directory:
+      recurse: true
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

@@ -1,0 +1,6 @@
+architecture: standalone
+auth:
+  password: "redis123"
+master:
+  persistence:
+    existingClaim: redis-pvc
