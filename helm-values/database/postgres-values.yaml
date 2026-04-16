@@ -1,7 +1,12 @@
 global:
   postgresql:
     auth:
-      postgresPassword: "admin123"
+      existingSecret: "postgres-db-secret"
+      secretKeys:
+        adminPasswordKey: "postgres-password"
+        userPasswordKey: "keycloak-password"
+      database: "keycloak_db"
+      username: "keycloak_admin"
 architecture: standalone
 primary:
   persistence:
