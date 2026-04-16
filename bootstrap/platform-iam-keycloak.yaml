@@ -1,0 +1,24 @@
+piVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-iam-keycloak
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://charts.bitnami.com/bitnami
+      chart: keycloak
+      targetRevision: "21.4.2" # 적정 버전 고정
+      helm:
+        valueFiles:
+          - $values/helm-values/iam/keycloak-values-dev.yaml
+    - repoURL: https://gitlab.am.micube.dev/daegu-tp/mfg-data-platform/gitops/platform-infra.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

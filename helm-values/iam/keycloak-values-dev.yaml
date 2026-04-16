@@ -1,0 +1,23 @@
+# --- 공통 설정 부분 ---
+auth:
+  adminUser: "admin"
+  existingSecret: "keycloak-admin-secret"
+  passwordSecretKey: "admin-password"
+postgresql:
+  enabled: false
+externalDatabase:
+  host: "platform-db-postgres-postgresql.default.svc.cluster.local"
+  port: 5432
+  user: "keycloak_admin"
+  database: "keycloak_db"
+  existingSecret: "postgres-db-secret"
+  existingSecretPasswordKey: "keycloak-password"
+# 프록시 모드 비활성화 (다이렉트 통신)
+proxy: none
+# Ingress 비활성화
+ingress:
+  enabled: false
+# IP 기반 임시 접속을 위한 엄격한 호스트 검사 해제
+extraEnvVars:
+  - name: KC_HOSTNAME_STRICT
+    value: "false"
