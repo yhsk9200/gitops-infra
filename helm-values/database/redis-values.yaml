@@ -4,3 +4,5 @@ auth:
 master:
   persistence:
     existingClaim: redis-pvc
+volumePermissions:
+  enabled: true

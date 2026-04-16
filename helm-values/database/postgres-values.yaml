@@ -6,3 +6,5 @@ architecture: standalone
 primary:
   persistence:
     existingClaim: postgres-pvc
+volumePermissions:
+  enabled: true
