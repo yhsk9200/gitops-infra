@@ -13,15 +13,7 @@ spec:
     - "https://bitnami-labs.github.io/sealed-secrets"
   destinations:
     - server: "https://kubernetes.default.svc"
-      namespace: "platform-system"
-    - server: "https://kubernetes.default.svc"
-      namespace: "platform-db"
-    - server: "https://kubernetes.default.svc"
-      namespace: "platform-iam"
-    - server: "https://kubernetes.default.svc"
-      namespace: "argocd"
+      namespace: "*"
   clusterResourceWhitelist:
-    - group: ""
-      kind: Namespace
-    - group: ""
-      kind: PersistentVolume
+    - group: "*"
+      kind: "*"
