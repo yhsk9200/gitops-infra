@@ -9,6 +9,8 @@ spec:
     repoURL: "https://gitlab.am.micube.dev/daegu-tp/mfg-data-platform/gitops/platform-infra.git"
     targetRevision: main
     path: apps
+    directory:
+      recurse: true
   destination:
     server: "https://kubernetes.default.svc"
     namespace: argocd
