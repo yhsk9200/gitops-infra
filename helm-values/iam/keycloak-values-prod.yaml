@@ -1,8 +1,4 @@
 # --- 공통 설정 부분 ---
-image:
-  registry: docker.io
-  repository: bitnami/keycloak
-  tag: 26.0.0-debian-12-r1
 auth:
   adminUser: "admin"
   existingSecret: "keycloak-admin-secret"
