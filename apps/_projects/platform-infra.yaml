@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform-infra
+  namespace: argocd
+spec:
+  description: "플랫폼 인프라 공용 컴포넌트 프로젝트"
+  sourceRepos:
+    - "https://gitlab.am.micube.dev/daegu-tp/mfg-data-platform/gitops/platform-infra.git"
+    - "https://charts.bitnami.com/bitnami"
+    - "https://bitnami-labs.github.io/sealed-secrets"
+  destinations:
+    - server: "https://kubernetes.default.svc"
+      namespace: "platform-system"
+    - server: "https://kubernetes.default.svc"
+      namespace: "platform-db"
+    - server: "https://kubernetes.default.svc"
+      namespace: "platform-iam"
+    - server: "https://kubernetes.default.svc"
+      namespace: "argocd"
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: ""
+      kind: PersistentVolume

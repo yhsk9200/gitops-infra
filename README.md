@@ -1,6 +1,6 @@
 # platform-infra
 
-
+대구테크노파크 제조데이터플랫폼 — 인프라 공용 컴포넌트 GitOps 저장소
 
 ## Getting started
 
@@ -13,7 +13,7 @@ Already a pro? Just edit this README.md and make it your own. Want to make it ea
 - [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
 - [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
 
-```
+```bash
 cd existing_repo
 git remote add origin https://gitlab.am.micube.dev/daegu-tp/mfg-data-platform/gitops/platform-infra.git
 git branch -M main
@@ -32,62 +32,140 @@ git push -uf origin main
 - [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
 - [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
 
-## Test and Deploy
+---
 
-Use the built-in continuous integration in GitLab.
+# 프로젝트 상세 아키텍처 및 구조 (App of Apps)
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+이 저장소는 ArgoCD **App of Apps** 패턴을 사용하여 플랫폼 인프라 공용 컴포넌트들을 선언적으로 관리합니다.
+엔터프라이즈 환경의 베스트 프랙티스(네임스페이스 격리, Sync Wave 등)를 적용하여 설계되었습니다.
 
-***
+## 1. 아키텍처 및 배포 흐름 (Sync Waves)
 
-# Editing this README
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    ArgoCD (argocd 네임스페이스)                     │
+│                                                                 │
+│  platform-root-infra (Root App)                                │
+│  └─ path: apps/ ──────────────────────────────────────────┐    │
+│                                                            │    │
+│  ┌─────────────── Sync Wave 배포 순서 ────────────────────┐  │    │
+│  │                                                      │  │    │
+│  │  Wave -3: platform-infra-namespaces (NS 일괄 생성)      │  │    │
+│  │  Wave -2: platform-system-sealed-secrets (Controller)│  │    │
+│  │  Wave -1: platform-infra-secrets (SealedSecrets)     │  │    │
+│  │  Wave  0: platform-infra-storage (PV/PVC)            │  │    │
+│  │  Wave  1: platform-db-postgres, platform-db-redis    │  │    │
+│  │  Wave  2: platform-iam-keycloak                      │  │    │
+│  │                                                      │  │    │
+│  └──────────────────────────────────────────────────────┘  │    │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+## 2. 도메인별 네임스페이스 분리
 
-## Suggestions for a good README
+보안 및 리소스 관리 효율을 위해 워크로드 특성별로 네임스페이스를 분리하여 운영합니다.
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+| 네임스페이스 | 용도 | 배포 리소스 |
+|-------------|------|------------|
+| `platform-system` | 시스템 컴포넌트 | Sealed Secrets Controller |
+| `platform-db` | 데이터베이스 | PostgreSQL, Redis, 관련 Secret 및 PV/PVC |
+| `platform-iam` | 인증/인가 | Keycloak, 관련 Secret (`keycloak-db-secret` 등) |
 
-## Name
-Choose a self-explaining name for your project.
+## 3. 디렉토리 구조 상세
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+```
+platform-infra/
+├── bootstrap/                              # ArgoCD 부트스트랩 (클러스터 최초 1회 수동 적용)
+│   └── platform-root-infra.yaml           # Root Application (App of Apps 진입점)
+│
+├── apps/                                   # 자식 Application 리소스 
+│   ├── _projects/                         # AppProject 정의 
+│   │   └── platform-infra.yaml           # 인프라 전용 AppProject (RBAC 및 배포 권한 통제)
+│   ├── platform-infra-namespaces.yaml     # 네임스페이스 자동 배포
+│   ├── platform-system-sealed-secrets.yaml 
+│   ├── platform-infra-secrets.yaml        
+│   ├── platform-infra-storage.yaml        
+│   ├── platform-db-postgres.yaml          
+│   ├── platform-db-redis.yaml             
+│   └── platform-iam-keycloak.yaml         
+│
+├── manifests/                              # K8s 순수 매니페스트 리소스
+│   ├── namespaces/                        # 네임스페이스 선언
+│   ├── security/                          # SealedSecret 리소스 모음 
+│   │   ├── keycloak-db-sealed-secret.yaml # Keycloak의 크로스 네임스페이스 엑세스용 DB Secret
+│   │   ├── keycloak-sealed-secret.yaml    
+│   │   ├── postgres-sealed-secret.yaml    
+│   │   └── redis-sealed-secret.yaml       
+│   └── storage/                           # PV/PVC
+│
+└── helm-values/                            # Helm Chart 커스텀 Values
+    ├── database/
+    │   ├── postgres-values.yaml
+    │   └── redis-values.yaml
+    ├── iam/
+    │   ├── keycloak-values-dev.yaml
+    │   └── keycloak-values-prod.yaml
+    └── system/
+        └── sealed-secrets-values.yaml
+```
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+## 4. 필수 작업: SealedSecret 재암호화 안내
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+본 프로젝트의 SealedSecret은 네임스페이스 변경을 방지하는 **`strict` scope**로 암호화되어 있습니다. 기존(`default` 등)에서 전용 네임스페이스(`platform-db`, `platform-iam`)로 설계를 변경함에 따라 **클러스터 배포 전 반드시 재암호화**가 필요합니다.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+### 재암호화 절차
+```bash
+# 1. Sealed Secrets Controller의 퍼블릭 인증서 추출 (설치된 클러스터에서)
+kubeseal --fetch-cert \
+  --controller-name=sealed-secrets-controller \
+  --controller-namespace=platform-system \
+  > pub-cert.pem
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+# 2. PostgreSQL 암호화 (Namespace: platform-db)
+kubectl create secret generic postgres-db-secret \
+  --namespace=platform-db \
+  --from-literal=postgres-password='실제_비밀번호' \
+  --from-literal=keycloak-password='실제_비밀번호' \
+  --dry-run=client -o yaml | \
+  kubeseal --cert pub-cert.pem --format=yaml > manifests/security/postgres-sealed-secret.yaml
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+# 3. Redis 암호화 (Namespace: platform-db)
+kubectl create secret generic redis-secret \
+  --namespace=platform-db \
+  --from-literal=redis-password='실제_비밀번호' \
+  --dry-run=client -o yaml | \
+  kubeseal --cert pub-cert.pem --format=yaml > manifests/security/redis-sealed-secret.yaml
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+# 4. Keycloak 관리자 암호화 (Namespace: platform-iam)
+kubectl create secret generic keycloak-admin-secret \
+  --namespace=platform-iam \
+  --from-literal=admin-password='실제_비밀번호' \
+  --dry-run=client -o yaml | \
+  kubeseal --cert pub-cert.pem --format=yaml > manifests/security/keycloak-sealed-secret.yaml
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+# 5. Keycloak용 DB 연결 암호화 (Namespace: platform-iam)
+kubectl create secret generic keycloak-db-secret \
+  --namespace=platform-iam \
+  --from-literal=keycloak-password='실제_비밀번호(위의 PostgreSQL과 동일하게)' \
+  --dry-run=client -o yaml | \
+  kubeseal --cert pub-cert.pem --format=yaml > manifests/security/keycloak-db-sealed-secret.yaml
+```
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+## 5. 클러스터 적용 가이드
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+모든 재암호화가 끝났다면 다음 명령어를 통해 최초 1회 부트스트랩을 실행합니다.
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+```bash
+kubectl apply -f bootstrap/platform-root-infra.yaml
+```
 
-## License
-For open source projects, say how it is licensed.
+이후 ArgoCD는 `apps/` 폴더 내의 Application 명세(Sync Wave)에 따라 Namespace → Controller → Secret → Storage → DB → IAM 순으로 안전하게 배포 의존성을 보장하며 구성됩니다.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+## 6. 컴포넌트 버전 정보
+
+| 컴포넌트 | 차트/이미지 | 버전 |
+|---------|------------|------|
+| PostgreSQL | bitnami/postgresql | 18.5.19 |
+| Redis | bitnami/redis | 25.3.11 |
+| Keycloak | bitnami/keycloak | 25.2.0 |
+| Sealed Secrets | sealed-secrets | 2.18.4 |

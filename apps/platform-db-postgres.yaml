@@ -1,24 +1,28 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: platform-db-redis
+  name: platform-db-postgres
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 spec:
-  project: default
+  project: platform-infra
   sources:
     - repoURL: "https://charts.bitnami.com/bitnami"
-      chart: redis
-      targetRevision: 25.3.11
+      chart: postgresql
+      targetRevision: 18.5.19
       helm:
         valueFiles:
-          - $values/helm-values/database/redis-values.yaml
+          - $values/helm-values/database/postgres-values.yaml
     - repoURL: "https://gitlab.am.micube.dev/daegu-tp/mfg-data-platform/gitops/platform-infra.git"
       targetRevision: main
       ref: values
   destination:
     server: "https://kubernetes.default.svc"
-    namespace: default
+    namespace: platform-db
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
