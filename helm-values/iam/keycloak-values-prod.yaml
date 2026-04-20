@@ -6,11 +6,11 @@ auth:
 postgresql:
   enabled: false
 externalDatabase:
-  host: "platform-db-postgres-postgresql.default.svc.cluster.local"
+  host: "platform-db-postgres-postgresql.platform-db.svc.cluster.local"
   port: 5432
   user: "keycloak_admin"
   database: "keycloak_db"
-  existingSecret: "postgres-db-secret"
+  existingSecret: "keycloak-db-secret"
   existingSecretPasswordKey: "keycloak-password"
 # 리버스 프록시 인식 활성화
 proxy: edge
@@ -18,6 +18,6 @@ proxy: edge
 ingress:
   enabled: true
   ingressClassName: traefik
-  hostname: auth.your-domain.com # 👈 실제 운영 도메인 (또는 서버IP.nip.io)
+  hostname: auth.210.113.225.245.nip.io
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web

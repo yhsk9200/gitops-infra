@@ -6,11 +6,11 @@ auth:
 postgresql:
   enabled: false
 externalDatabase:
-  host: "platform-db-postgres-postgresql.default.svc.cluster.local"
+  host: "platform-db-postgres-postgresql.platform-db.svc.cluster.local"
   port: 5432
   user: "keycloak_admin"
   database: "keycloak_db"
-  existingSecret: "postgres-db-secret"
+  existingSecret: "keycloak-db-secret"
   existingSecretPasswordKey: "keycloak-password"
 # 프록시 모드 비활성화 (다이렉트 통신)
 proxy: none

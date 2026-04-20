@@ -1,14 +1,16 @@
-piVersion: argoproj.io/v1alpha1
+apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: platform-iam-keycloak
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
-  project: default
+  project: platform-infra
   sources:
     - repoURL: https://charts.bitnami.com/bitnami
       chart: keycloak
-      targetRevision: "21.4.2" # 적정 버전 고정
+      targetRevision: "25.2.0"
       helm:
         valueFiles:
           - $values/helm-values/iam/keycloak-values-dev.yaml
@@ -17,8 +19,10 @@ spec:
       ref: values
   destination:
     server: https://kubernetes.default.svc
-    namespace: default
+    namespace: platform-iam
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

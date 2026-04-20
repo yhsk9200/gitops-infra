@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform-system
+  labels:
+    app.kubernetes.io/part-of: platform-infra
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform-db
+  labels:
+    app.kubernetes.io/part-of: platform-infra
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform-iam
+  labels:
+    app.kubernetes.io/part-of: platform-infra
