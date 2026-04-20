@@ -65,11 +65,11 @@ git push -uf origin main
 
 보안 및 리소스 관리 효율을 위해 워크로드 특성별로 네임스페이스를 분리하여 운영합니다.
 
-| 네임스페이스 | 용도 | 배포 리소스 |
-|-------------|------|------------|
-| `platform-system` | 시스템 컴포넌트 | Sealed Secrets Controller |
-| `platform-db` | 데이터베이스 | PostgreSQL, Redis, 관련 Secret 및 PV/PVC |
-| `platform-iam` | 인증/인가 | Keycloak, 관련 Secret (`keycloak-db-secret` 등) |
+| 네임스페이스      | 용도            | 배포 리소스                                     |
+| ----------------- | --------------- | ----------------------------------------------- |
+| `platform-system` | 시스템 컴포넌트 | Sealed Secrets Controller                       |
+| `platform-db`     | 데이터베이스    | PostgreSQL, Redis, 관련 Secret 및 PV/PVC        |
+| `platform-iam`    | 인증/인가       | Keycloak, 관련 Secret (`keycloak-db-secret` 등) |
 
 ## 3. 디렉토리 구조 상세
 
@@ -78,24 +78,24 @@ platform-infra/
 ├── bootstrap/                              # ArgoCD 부트스트랩 (클러스터 최초 1회 수동 적용)
 │   └── platform-root-infra.yaml           # Root Application (App of Apps 진입점)
 │
-├── apps/                                   # 자식 Application 리소스 
-│   ├── _projects/                         # AppProject 정의 
+├── apps/                                   # 자식 Application 리소스
+│   ├── _projects/                         # AppProject 정의
 │   │   └── platform-infra.yaml           # 인프라 전용 AppProject (RBAC 및 배포 권한 통제)
 │   ├── platform-infra-namespaces.yaml     # 네임스페이스 자동 배포
-│   ├── platform-system-sealed-secrets.yaml 
-│   ├── platform-infra-secrets.yaml        
-│   ├── platform-infra-storage.yaml        
-│   ├── platform-db-postgres.yaml          
-│   ├── platform-db-redis.yaml             
-│   └── platform-iam-keycloak.yaml         
+│   ├── platform-system-sealed-secrets.yaml
+│   ├── platform-infra-secrets.yaml
+│   ├── platform-infra-storage.yaml
+│   ├── platform-db-postgres.yaml
+│   ├── platform-db-redis.yaml
+│   └── platform-iam-keycloak.yaml
 │
 ├── manifests/                              # K8s 순수 매니페스트 리소스
 │   ├── namespaces/                        # 네임스페이스 선언
-│   ├── security/                          # SealedSecret 리소스 모음 
+│   ├── security/                          # SealedSecret 리소스 모음
 │   │   ├── keycloak-db-sealed-secret.yaml # Keycloak의 크로스 네임스페이스 엑세스용 DB Secret
-│   │   ├── keycloak-sealed-secret.yaml    
-│   │   ├── postgres-sealed-secret.yaml    
-│   │   └── redis-sealed-secret.yaml       
+│   │   ├── keycloak-sealed-secret.yaml
+│   │   ├── postgres-sealed-secret.yaml
+│   │   └── redis-sealed-secret.yaml
 │   └── storage/                           # PV/PVC
 │
 └── helm-values/                            # Helm Chart 커스텀 Values
@@ -114,6 +114,7 @@ platform-infra/
 본 프로젝트의 SealedSecret은 네임스페이스 변경을 방지하는 **`strict` scope**로 암호화되어 있습니다. 기존(`default` 등)에서 전용 네임스페이스(`platform-db`, `platform-iam`)로 설계를 변경함에 따라 **클러스터 배포 전 반드시 재암호화**가 필요합니다.
 
 ### 재암호화 절차
+
 ```bash
 # 1. Sealed Secrets Controller의 퍼블릭 인증서 추출 (설치된 클러스터에서)
 kubeseal --fetch-cert \
@@ -124,29 +125,29 @@ kubeseal --fetch-cert \
 # 2. PostgreSQL 암호화 (Namespace: platform-db)
 kubectl create secret generic postgres-db-secret \
   --namespace=platform-db \
-  --from-literal=postgres-password='실제_비밀번호' \
-  --from-literal=keycloak-password='실제_비밀번호' \
+  --from-literal=postgres-password='micube2171!@' \
+  --from-literal=keycloak-password='micube2171!@' \
   --dry-run=client -o yaml | \
   kubeseal --cert pub-cert.pem --format=yaml > manifests/security/postgres-sealed-secret.yaml
 
 # 3. Redis 암호화 (Namespace: platform-db)
 kubectl create secret generic redis-secret \
   --namespace=platform-db \
-  --from-literal=redis-password='실제_비밀번호' \
+  --from-literal=redis-password='micube2171!@' \
   --dry-run=client -o yaml | \
   kubeseal --cert pub-cert.pem --format=yaml > manifests/security/redis-sealed-secret.yaml
 
 # 4. Keycloak 관리자 암호화 (Namespace: platform-iam)
 kubectl create secret generic keycloak-admin-secret \
   --namespace=platform-iam \
-  --from-literal=admin-password='실제_비밀번호' \
+  --from-literal=admin-password='micube2171!@' \
   --dry-run=client -o yaml | \
   kubeseal --cert pub-cert.pem --format=yaml > manifests/security/keycloak-sealed-secret.yaml
 
 # 5. Keycloak용 DB 연결 암호화 (Namespace: platform-iam)
 kubectl create secret generic keycloak-db-secret \
   --namespace=platform-iam \
-  --from-literal=keycloak-password='실제_비밀번호(위의 PostgreSQL과 동일하게)' \
+  --from-literal=keycloak-password='micube2171!@' \
   --dry-run=client -o yaml | \
   kubeseal --cert pub-cert.pem --format=yaml > manifests/security/keycloak-db-sealed-secret.yaml
 ```
@@ -163,9 +164,9 @@ kubectl apply -f bootstrap/platform-root-infra.yaml
 
 ## 6. 컴포넌트 버전 정보
 
-| 컴포넌트 | 차트/이미지 | 버전 |
-|---------|------------|------|
-| PostgreSQL | bitnami/postgresql | 18.5.19 |
-| Redis | bitnami/redis | 25.3.11 |
-| Keycloak | bitnami/keycloak | 25.2.0 |
-| Sealed Secrets | sealed-secrets | 2.18.4 |
+| 컴포넌트       | 차트/이미지        | 버전    |
+| -------------- | ------------------ | ------- |
+| PostgreSQL     | bitnami/postgresql | 18.5.19 |
+| Redis          | bitnami/redis      | 25.3.11 |
+| Keycloak       | bitnami/keycloak   | 25.2.0  |
+| Sealed Secrets | sealed-secrets     | 2.18.4  |
