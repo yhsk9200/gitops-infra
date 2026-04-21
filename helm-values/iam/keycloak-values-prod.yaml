@@ -1,4 +1,7 @@
 # --- 공통 설정 부분 ---
+global:
+  security:
+    allowInsecureImages: true
 image:
   registry: docker.io
   repository: bitnamilegacy/keycloak
