@@ -1,0 +1,17 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform-infra
+  namespace: argocd
+spec:
+  sourceRepos:
+    - https://gitlab.am.micube.dev/daegu-tp/mfg-data-platform/gitops/platform-infra.git
+    - https://charts.bitnami.com/bitnami
+    - oci://registry-1.docker.io/bitnamicharts
+    - https://bitnami-labs.github.io/sealed-secrets
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: '*'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '
