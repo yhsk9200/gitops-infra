@@ -8,9 +8,9 @@ metadata:
 spec:
   project: platform-infra
   sources:
-    - repoURL: oci://registry-1.docker.io/bitnamicharts
+    - repoURL: https://charts.bitnami.com/bitnami
       chart: keycloak
-      targetRevision: "25.2.0"
+      targetRevision: "24.4.13"
       helm:
         valueFiles:
           - $values/helm-values/iam/keycloak-values-dev.yaml
