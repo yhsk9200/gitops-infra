@@ -3,7 +3,10 @@ kind: AppProject
 metadata:
   name: platform-infra
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
 spec:
+  description: "플랫폼 인프라 공용 컴포넌트 프로젝트"
   sourceRepos:
     - https://gitlab.am.micube.dev/daegu-tp/mfg-data-platform/gitops/platform-infra.git
     - https://charts.bitnami.com/bitnami
@@ -11,7 +14,7 @@ spec:
     - https://bitnami-labs.github.io/sealed-secrets
   destinations:
     - server: https://kubernetes.default.svc
-      namespace: '*'
+      namespace: "*"
   clusterResourceWhitelist:
-    - group: '*'
-      kind: '
+    - group: "*"
+      kind: "*"
