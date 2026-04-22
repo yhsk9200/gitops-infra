@@ -12,6 +12,7 @@ spec:
     - https://charts.bitnami.com/bitnami
     - oci://registry-1.docker.io/bitnamicharts
     - https://bitnami-labs.github.io/sealed-secrets
+    - https://charts.jetstack.io
   destinations:
     - server: https://kubernetes.default.svc
       namespace: "*"
