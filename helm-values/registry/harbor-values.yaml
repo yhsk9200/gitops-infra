@@ -23,7 +23,6 @@ existingSecretAdminPasswordKey: admin-password
 # Harbor encryption key comes from SealedSecret `harbor-core-secret`
 secretKey: ""
 existingSecretSecretKey: harbor-core-secret
-existingSecretSecretKeyKey: secret-key
 
 persistence:
   enabled: true
