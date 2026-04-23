@@ -51,10 +51,14 @@ persistence:
       size: 10Gi
 
 database:
-  type: internal
-  internal:
-    password: ""
+  type: external
+  external:
+    host: platform-db-postgres-postgresql.platform-db.svc.cluster.local
+    port: 5432
+    username: harbor_admin
+    coreDatabase: harbor_registry
     existingSecret: harbor-db-secret
+    sslmode: disable
 
 redis:
   type: internal
@@ -72,9 +76,9 @@ trivy:
       memory: 1Gi
 
 metrics:
-  enabled: true
+  enabled: false
   serviceMonitor:
-    enabled: true
+    enabled: false
 
 core:
   resources:
@@ -102,6 +106,10 @@ registry:
     limits:
       cpu: 500m
       memory: 512Mi
+
+# Keep exporter disabled until Harbor finishes a clean bootstrap.
+exporter:
+  replicas: 0
 
 # Harbor OIDC can be configured later from the Harbor UI after Keycloak is ready.
 notary:
