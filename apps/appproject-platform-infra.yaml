@@ -11,6 +11,7 @@ spec:
     - https://gitlab.am.micube.dev/daegu-tp/mfg-data-platform/gitops/platform-infra.git
     - https://charts.bitnami.com/bitnami
     - oci://registry-1.docker.io/bitnamicharts
+    - https://helm.goharbor.io
     - https://bitnami-labs.github.io/sealed-secrets
     - https://charts.jetstack.io
     - https://prometheus-community.github.io/helm-charts
