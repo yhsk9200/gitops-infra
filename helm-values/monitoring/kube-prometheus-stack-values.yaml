@@ -1,23 +1,16 @@
 # =============================================================================
-# kube-prometheus-stack Helm Values (Dev 환경)
+# kube-prometheus-stack values for the dev k3s environment
 # =============================================================================
-# 포함 컴포넌트: Prometheus, Grafana, Alertmanager, node-exporter, kube-state-metrics
-# 대상 환경: k3s 단일 노드 클러스터
-# StorageClass: local-path (k3s 기본 제공)
+# Components: Prometheus, Grafana, Alertmanager, node-exporter, kube-state-metrics
+# StorageClass: local-path
 # =============================================================================
 
-# -----------------------------------------------------------------------------
-# Grafana 설정
-# -----------------------------------------------------------------------------
 grafana:
-  # 관리자 계정 — SealedSecret으로 관리 (grafana-admin-secret)
-  # adminUser 필드 제거: existingSecret 사용 시 충돌 방지
   admin:
     existingSecret: grafana-admin-secret
     userKey: admin-user
     passwordKey: admin-password
 
-  # 영구 스토리지 — 대시보드/플러그인/설정 보존
   persistence:
     enabled: true
     storageClassName: local-path
@@ -25,12 +18,9 @@ grafana:
       - ReadWriteOnce
     size: 10Gi
 
-  # Ingress 비활성화 — kubectl port-forward + SSH 터널로 접근
-  # 도메인 확보 후 Cert-Manager와 함께 활성화 예정
   ingress:
     enabled: false
 
-  # 리소스 제한 — 단일 노드 환경 최적화
   resources:
     requests:
       cpu: 100m
@@ -39,32 +29,36 @@ grafana:
       cpu: 500m
       memory: 512Mi
 
-  # 사이드카 — ConfigMap 기반 대시보드 자동 프로비저닝
-  # searchNamespace: ALL → 전체 네임스페이스의 대시보드 ConfigMap 탐지
   sidecar:
     dashboards:
       enabled: true
       searchNamespace: ALL
 
-# -----------------------------------------------------------------------------
-# Prometheus 설정
-# -----------------------------------------------------------------------------
+  additionalDataSources:
+    - name: Loki
+      uid: loki
+      type: loki
+      access: proxy
+      url: http://platform-monitoring-loki-gateway.platform-monitoring.svc.cluster.local
+      editable: true
+      isDefault: false
+      jsonData:
+        manageAlerts: false
+
 prometheus:
   prometheusSpec:
-    # 메트릭 데이터 보관 기간
     retention: 15d
 
-    # 영구 스토리지 — 메트릭 데이터 보존
     storageSpec:
       volumeClaimTemplate:
         spec:
           storageClassName: local-path
-          accessModes: ["ReadWriteOnce"]
+          accessModes:
+            - ReadWriteOnce
           resources:
             requests:
               storage: 50Gi
 
-    # 리소스 제한 — 단일 노드 환경 최적화
     resources:
       requests:
         cpu: 200m
@@ -73,29 +67,22 @@ prometheus:
         cpu: "1"
         memory: 2Gi
 
-    # ServiceMonitor/PodMonitor/Rule 셀렉터 설정
-    # false → Helm values 기준이 아닌 전체 네임스페이스 탐지
-    # 신규 서비스 추가 시 별도 설정 없이 자동 수집
     serviceMonitorSelectorNilUsesHelmValues: false
     podMonitorSelectorNilUsesHelmValues: false
     ruleSelectorNilUsesHelmValues: false
 
-# -----------------------------------------------------------------------------
-# Alertmanager 설정
-# -----------------------------------------------------------------------------
 alertmanager:
   alertmanagerSpec:
-    # 영구 스토리지 — 알림 상태/silence 설정 보존
     storage:
       volumeClaimTemplate:
         spec:
           storageClassName: local-path
-          accessModes: ["ReadWriteOnce"]
+          accessModes:
+            - ReadWriteOnce
           resources:
             requests:
               storage: 5Gi
 
-    # 리소스 제한 — 단일 노드 환경 최적화
     resources:
       requests:
         cpu: 50m
@@ -104,47 +91,27 @@ alertmanager:
         cpu: 200m
         memory: 256Mi
 
-# -----------------------------------------------------------------------------
-# Node Exporter — 노드 시스템 메트릭 수집 (CPU, Memory, Disk, Network)
-# -----------------------------------------------------------------------------
 nodeExporter:
   enabled: true
 
-# -----------------------------------------------------------------------------
-# Kube State Metrics — K8s 오브젝트 상태 메트릭 수집
-# (Pod, Deployment, StatefulSet, PVC 등)
-# -----------------------------------------------------------------------------
 kubeStateMetrics:
   enabled: true
 
-# -----------------------------------------------------------------------------
-# 기본 알림 규칙
-# -----------------------------------------------------------------------------
 defaultRules:
   create: true
   rules:
-    # k3s 내장 etcd는 메트릭 엔드포인트 미노출 → 비활성화
     etcd: false
-    # k3s에서 scheduler는 별도 프로세스로 노출되지 않음 → 비활성화
     kubeSchedulerAlerting: false
     kubeSchedulerRecording: false
 
-# -----------------------------------------------------------------------------
-# K3s 호환 설정 — k3s에서 노출되지 않는 컴포넌트 비활성화
-# -----------------------------------------------------------------------------
-
-# k3s는 controller-manager를 별도 프로세스로 노출하지 않음
 kubeControllerManager:
   enabled: false
 
-# k3s는 scheduler를 별도 프로세스로 노출하지 않음
 kubeScheduler:
   enabled: false
 
-# k3s는 etcd 메트릭 엔드포인트를 외부에 노출하지 않음
 kubeEtcd:
   enabled: false
 
-# k3s는 kube-proxy 대신 자체 네트워크 구현 사용
 kubeProxy:
   enabled: false
