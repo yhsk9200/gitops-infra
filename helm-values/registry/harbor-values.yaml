@@ -1,0 +1,109 @@
+# =============================================================================
+# Harbor Helm values for the dev k3s environment
+# =============================================================================
+
+expose:
+  type: ingress
+  ingress:
+    className: traefik
+    hosts:
+      core: harbor.210.113.225.245.nip.io
+  tls:
+    enabled: false
+
+externalURL: http://harbor.210.113.225.245.nip.io
+
+updateStrategy:
+  type: Recreate
+
+# Harbor admin password comes from SealedSecret `harbor-admin-secret`
+existingSecretAdminPassword: harbor-admin-secret
+existingSecretAdminPasswordKey: admin-password
+
+# Harbor encryption key comes from SealedSecret `harbor-core-secret`
+secretKey: ""
+existingSecretSecretKey: harbor-core-secret
+existingSecretSecretKeyKey: secret-key
+
+persistence:
+  enabled: true
+  resourcePolicy: "keep"
+  persistentVolumeClaim:
+    registry:
+      storageClass: local-path
+      accessMode: ReadWriteOnce
+      size: 500Gi
+    jobservice:
+      jobLog:
+        storageClass: local-path
+        accessMode: ReadWriteOnce
+        size: 10Gi
+    database:
+      storageClass: local-path
+      accessMode: ReadWriteOnce
+      size: 10Gi
+    redis:
+      storageClass: local-path
+      accessMode: ReadWriteOnce
+      size: 5Gi
+    trivy:
+      storageClass: local-path
+      accessMode: ReadWriteOnce
+      size: 10Gi
+
+database:
+  type: internal
+  internal:
+    password: ""
+    existingSecret: harbor-db-secret
+
+redis:
+  type: internal
+
+trivy:
+  enabled: true
+  gitHubToken: ""
+  skipUpdate: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+
+core:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+jobservice:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+registry:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Harbor OIDC can be configured later from the Harbor UI after Keycloak is ready.
+notary:
+  enabled: false

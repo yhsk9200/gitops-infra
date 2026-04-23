@@ -125,29 +125,29 @@ kubeseal --fetch-cert \
 # 2. PostgreSQL 암호화 (Namespace: platform-db)
 kubectl create secret generic postgres-db-secret \
   --namespace=platform-db \
-  --from-literal=postgres-password='micube2171!@' \
-  --from-literal=keycloak-password='micube2171!@' \
+  --from-literal=postgres-password='비밀번호' \
+  --from-literal=keycloak-password='비밀번호' \
   --dry-run=client -o yaml | \
   kubeseal --cert pub-cert.pem --format=yaml > manifests/security/postgres-sealed-secret.yaml
 
 # 3. Redis 암호화 (Namespace: platform-db)
 kubectl create secret generic redis-secret \
   --namespace=platform-db \
-  --from-literal=redis-password='micube2171!@' \
+  --from-literal=redis-password='비밀번호' \
   --dry-run=client -o yaml | \
   kubeseal --cert pub-cert.pem --format=yaml > manifests/security/redis-sealed-secret.yaml
 
 # 4. Keycloak 관리자 암호화 (Namespace: platform-iam)
 kubectl create secret generic keycloak-admin-secret \
   --namespace=platform-iam \
-  --from-literal=admin-password='micube2171!@' \
+  --from-literal=admin-password='비밀번호' \
   --dry-run=client -o yaml | \
   kubeseal --cert pub-cert.pem --format=yaml > manifests/security/keycloak-sealed-secret.yaml
 
 # 5. Keycloak용 DB 연결 암호화 (Namespace: platform-iam)
 kubectl create secret generic keycloak-db-secret \
   --namespace=platform-iam \
-  --from-literal=keycloak-password='micube2171!@' \
+  --from-literal=keycloak-password='비밀번호' \
   --dry-run=client -o yaml | \
   kubeseal --cert pub-cert.pem --format=yaml > manifests/security/keycloak-db-sealed-secret.yaml
 ```

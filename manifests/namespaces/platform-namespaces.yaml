@@ -25,3 +25,10 @@ metadata:
   name: platform-monitoring
   labels:
     app.kubernetes.io/part-of: platform-infra
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform-registry
+  labels:
+    app.kubernetes.io/part-of: platform-infra
