@@ -198,3 +198,27 @@ kubectl apply -f bootstrap/platform-root-infra.yaml
 | Cert-Manager   | jetstack/cert-manager        | v1.17.0 |
 | Prometheus Stack| prometheus-community       | 83.6.0  |
 | Harbor         | goharbor/harbor              | 1.16.2  |
+
+## 7. Harbor 운영 메모
+
+현재 Harbor는 internal PostgreSQL 대신 external PostgreSQL(`platform-db-postgres`)을 사용하도록 구성되어 있습니다.
+
+운영 중 ArgoCD에서 `platform-registry-harbor` 애플리케이션이 `Healthy + OutOfSync`로 보일 수 있습니다. 현 시점에서 확인된 주요 원인은 다음과 같습니다.
+
+- Harbor chart 내부 Secret/checksum 렌더링 차이
+- `platform-registry-harbor-trivy` StatefulSet의 `volumeClaimTemplates` 하위 `apiVersion` / `kind` 기본값 차이
+
+위 차이는 실제 서비스 장애로 이어지지 않는 경우가 있으며, Harbor UI 접속, pod 상태, 실제 push/pull 동작이 정상이라면 known diff로 간주할 수 있습니다.
+
+Harbor 정상 여부는 ArgoCD `Synced` 상태만으로 판단하지 말고 아래 항목을 함께 확인합니다.
+
+- `platform-registry` 네임스페이스의 Harbor 관련 pod가 `Running` / `Ready` 상태인지
+- Harbor UI 로그인과 프로젝트 조회가 정상인지
+- 이미지 push / pull 이 실제로 동작하는지
+- external PostgreSQL 연결이 유지되는지
+
+현재 Harbor 외부 접속 주소는 `http://harbor.210.113.225.245.nip.io:22280` 입니다. 외부 방화벽 또는 NAT를 통해 22280 포트로 노출되는 구조이므로, Harbor `externalURL`도 동일한 포트를 포함해야 합니다.
+
+또한 TLS를 사용하지 않는 HTTP 레지스트리 구성이므로, 외부 Docker 클라이언트에서는 `harbor.210.113.225.245.nip.io:22280` 를 insecure registry로 허용해야 push / pull 테스트가 정상 동작할 수 있습니다.
+
+향후 Harbor chart 업그레이드나 secret 구조 변경 후 diff 양상이 바뀌면, 그때 다시 `ignoreDifferences` 적용 여부를 검토합니다.
