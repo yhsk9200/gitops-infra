@@ -41,7 +41,7 @@ git push -uf origin main
 
 ## 1. 아키텍처 및 배포 흐름 (Sync Waves)
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                    ArgoCD (argocd 네임스페이스)                     │
 │                                                                 │
@@ -53,9 +53,11 @@ git push -uf origin main
 │  │  Wave -3: platform-infra-namespaces (NS 일괄 생성)      │  │    │
 │  │  Wave -2: platform-system-sealed-secrets (Controller)│  │    │
 │  │  Wave -1: platform-infra-secrets (SealedSecrets)     │  │    │
-│  │  Wave  0: platform-infra-storage (PV/PVC)            │  │    │
+│  │  Wave  0: platform-infra-storage, cert-manager       │  │    │
 │  │  Wave  1: platform-db-postgres, platform-db-redis    │  │    │
 │  │  Wave  2: platform-iam-keycloak                      │  │    │
+│  │  Wave  3: platform-monitoring-prometheus             │  │    │
+│  │  Wave  4: platform-registry-harbor                   │  │    │
 │  │                                                      │  │    │
 │  └──────────────────────────────────────────────────────┘  │    │
 └─────────────────────────────────────────────────────────────────┘
@@ -67,44 +69,50 @@ git push -uf origin main
 
 | 네임스페이스      | 용도            | 배포 리소스                                     |
 | ----------------- | --------------- | ----------------------------------------------- |
-| `platform-system` | 시스템 컴포넌트 | Sealed Secrets Controller                       |
+| `platform-system` | 시스템 컴포넌트 | Sealed Secrets Controller, Cert-Manager         |
 | `platform-db`     | 데이터베이스    | PostgreSQL, Redis, 관련 Secret 및 PV/PVC        |
 | `platform-iam`    | 인증/인가       | Keycloak, 관련 Secret (`keycloak-db-secret` 등) |
+| `platform-monitoring` | 관측 시스템  | Prometheus, Grafana, Alertmanager, Node Exporter|
+| `platform-registry`   | 이미지/차트 저장 | Harbor Container Registry, Trivy 스캐너          |
 
 ## 3. 디렉토리 구조 상세
 
-```
+```text
 platform-infra/
 ├── bootstrap/                              # ArgoCD 부트스트랩 (클러스터 최초 1회 수동 적용)
-│   └── platform-root-infra.yaml           # Root Application (App of Apps 진입점)
+│   ├── platform-root-infra.yaml           # Root Application (App of Apps 진입점)
+│   └── platform-project.yaml              # 인프라 전용 AppProject (RBAC 및 권한 통제)
 │
 ├── apps/                                   # 자식 Application 리소스
-│   ├── _projects/                         # AppProject 정의
-│   │   └── platform-infra.yaml           # 인프라 전용 AppProject (RBAC 및 배포 권한 통제)
 │   ├── platform-infra-namespaces.yaml     # 네임스페이스 자동 배포
 │   ├── platform-system-sealed-secrets.yaml
+│   ├── platform-system-cert-manager.yaml  # Cert-Manager 배포
 │   ├── platform-infra-secrets.yaml
 │   ├── platform-infra-storage.yaml
 │   ├── platform-db-postgres.yaml
 │   ├── platform-db-redis.yaml
-│   └── platform-iam-keycloak.yaml
+│   ├── platform-iam-keycloak.yaml
+│   ├── platform-monitoring-prometheus.yaml # Kube-Prometheus-Stack 배포
+│   └── platform-registry-harbor.yaml      # Harbor 배포
 │
 ├── manifests/                              # K8s 순수 매니페스트 리소스
 │   ├── namespaces/                        # 네임스페이스 선언
 │   ├── security/                          # SealedSecret 리소스 모음
-│   │   ├── keycloak-db-sealed-secret.yaml # Keycloak의 크로스 네임스페이스 엑세스용 DB Secret
-│   │   ├── keycloak-sealed-secret.yaml
-│   │   ├── postgres-sealed-secret.yaml
-│   │   └── redis-sealed-secret.yaml
+│   │   ├── keycloak-*-secret.yaml         # Keycloak용 시크릿
+│   │   ├── postgres/redis-*-secret.yaml   # DB용 시크릿
+│   │   ├── grafana-sealed-secret.yaml     # Grafana 관리자용 시크릿
+│   │   └── harbor-sealed-secret.yaml      # Harbor 관리자 및 내부 통신용 코어 시크릿
 │   └── storage/                           # PV/PVC
 │
 └── helm-values/                            # Helm Chart 커스텀 Values
     ├── database/
-    │   ├── postgres-values.yaml
-    │   └── redis-values.yaml
+    │   ├── postgres/redis-values.yaml
     ├── iam/
-    │   ├── keycloak-values-dev.yaml
-    │   └── keycloak-values-prod.yaml
+    │   ├── keycloak-values-*.yaml
+    ├── monitoring/
+    │   └── kube-prometheus-stack-values.yaml
+    ├── registry/
+    │   └── harbor-values.yaml
     └── system/
         └── sealed-secrets-values.yaml
 ```
@@ -150,6 +158,23 @@ kubectl create secret generic keycloak-db-secret \
   --from-literal=keycloak-password='비밀번호' \
   --dry-run=client -o yaml | \
   kubeseal --cert pub-cert.pem --format=yaml > manifests/security/keycloak-db-sealed-secret.yaml
+
+# 6. Grafana 관리자 암호화 (Namespace: platform-monitoring)
+kubectl create secret generic grafana-admin-secret \
+  --namespace=platform-monitoring \
+  --from-literal=admin-user='admin' \
+  --from-literal=admin-password='비밀번호' \
+  --dry-run=client -o yaml | \
+  kubeseal --cert pub-cert.pem --format=yaml > manifests/security/grafana-sealed-secret.yaml
+
+# 7. Harbor 관련 비밀번호 암호화 (Namespace: platform-registry)
+# (관리자 비밀번호, 내부 통신 코어 키 16자리, 자체 Postgres 비밀번호 등)
+kubectl create secret generic harbor-admin-secret \
+  --namespace=platform-registry \
+  --from-literal=admin-password='비밀번호' \
+  --dry-run=client -o yaml | \
+  kubeseal --cert pub-cert.pem --format=yaml > manifests/security/harbor-sealed-secret.yaml
+# (나머지 core 키와 db 비밀번호는 harbor-sealed-secret.yaml 주석 참조하여 덧붙이기)
 ```
 
 ## 5. 클러스터 적용 가이드
@@ -164,9 +189,12 @@ kubectl apply -f bootstrap/platform-root-infra.yaml
 
 ## 6. 컴포넌트 버전 정보
 
-| 컴포넌트       | 차트/이미지        | 버전    |
-| -------------- | ------------------ | ------- |
-| PostgreSQL     | bitnami/postgresql | 18.5.19 |
-| Redis          | bitnami/redis      | 25.3.11 |
-| Keycloak       | bitnami/keycloak   | 25.2.0  |
-| Sealed Secrets | sealed-secrets     | 2.18.4  |
+| 컴포넌트       | 차트/이미지                  | 버전    |
+| -------------- | ---------------------------- | ------- |
+| PostgreSQL     | bitnami/postgresql           | 18.5.19 |
+| Redis          | bitnami/redis                | 25.3.11 |
+| Keycloak       | bitnami/keycloak             | 25.2.0  |
+| Sealed Secrets | bitnami/sealed-secrets       | 2.18.4  |
+| Cert-Manager   | jetstack/cert-manager        | v1.17.0 |
+| Prometheus Stack| prometheus-community       | 83.6.0  |
+| Harbor         | goharbor/harbor              | 1.16.2  |
