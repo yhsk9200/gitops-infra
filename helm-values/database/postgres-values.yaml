@@ -22,21 +22,19 @@ primary:
     scripts:
       init-harbor-db.sh: |
         #!/bin/bash
-        set -e
+        set -euo pipefail
         echo "=== Harbor database initialization ==="
-        export PGPASSWORD=$(cat /run/secrets/db/postgres-password)
-        HARBOR_PW=$(cat /run/secrets/db/harbor-password)
-        psql -v ON_ERROR_STOP=1 --username "postgres" --dbname "postgres" <<-EOSQL
-          DO \$\$
-          BEGIN
-            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'harbor_admin') THEN
-              CREATE ROLE harbor_admin WITH LOGIN PASSWORD '$HARBOR_PW';
-              RAISE NOTICE 'Role harbor_admin created.';
-            ELSE
-              RAISE NOTICE 'Role harbor_admin already exists, skipping.';
-            END IF;
-          END
-          \$\$;
+        export PGPASSWORD="$(cat /run/secrets/db/postgres-password)"
+        HARBOR_DB_PASSWORD="$(cat /run/secrets/db/harbor-password)"
+
+        psql -v ON_ERROR_STOP=1 \
+          --username "postgres" \
+          --dbname "postgres" \
+          --set harbor_password="${HARBOR_DB_PASSWORD}" <<-'EOSQL'
+          SELECT format('CREATE ROLE harbor_admin WITH LOGIN PASSWORD %L', :'harbor_password')
+          WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'harbor_admin')\gexec
+
+          ALTER ROLE harbor_admin WITH LOGIN PASSWORD :'harbor_password';
 
           SELECT 'CREATE DATABASE harbor_registry OWNER harbor_admin'
           WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'harbor_registry')\gexec

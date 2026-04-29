@@ -135,8 +135,12 @@ kubectl create secret generic postgres-db-secret \
   --namespace=platform-db \
   --from-literal=postgres-password='비밀번호' \
   --from-literal=keycloak-password='비밀번호' \
+  --from-literal=harbor-password='비밀번호' \
   --dry-run=client -o yaml | \
   kubeseal --cert pub-cert.pem --format=yaml > manifests/security/postgres-sealed-secret.yaml
+
+# harbor-password는 platform-registry 네임스페이스의 harbor-db-secret password와 동일해야 합니다.
+# PostgreSQL 최초 초기화 시 이 값으로 harbor_admin 사용자와 harbor_registry DB가 자동 생성됩니다.
 
 # 3. Redis 암호화 (Namespace: platform-db)
 kubectl create secret generic redis-secret \
@@ -202,6 +206,10 @@ kubectl apply -f bootstrap/platform-root-infra.yaml
 ## 7. Harbor 운영 메모
 
 현재 Harbor는 internal PostgreSQL 대신 external PostgreSQL(`platform-db-postgres`)을 사용하도록 구성되어 있습니다.
+
+신규 클러스터에서 `postgres-pvc`가 비어 있는 최초 기동이라면 PostgreSQL `initdb` 스크립트가 `harbor_admin` 사용자와 `harbor_registry` DB를 자동 생성합니다. 이때 `postgres-db-secret`에는 `postgres-password`, `keycloak-password`, `harbor-password`가 모두 있어야 하며, `harbor-password`는 `harbor-db-secret`의 `password`와 동일해야 합니다.
+
+이미 PostgreSQL PVC가 초기화된 환경에서는 `initdb` 스크립트가 다시 실행되지 않습니다. 이 경우 Harbor DB와 사용자는 수동 SQL 또는 별도 bootstrap Job으로 생성해야 합니다.
 
 운영 중 ArgoCD에서 `platform-registry-harbor` 애플리케이션이 `Healthy + OutOfSync`로 보일 수 있습니다. 현 시점에서 확인된 주요 원인은 다음과 같습니다.
 
