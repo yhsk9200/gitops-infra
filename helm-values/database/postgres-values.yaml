@@ -11,5 +11,42 @@ architecture: standalone
 primary:
   persistence:
     existingClaim: postgres-pvc
+  # ---------------------------------------------------------------------------
+  # Harbor DB 초기화 스크립트
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 최초 기동 시(data 디렉토리가 비어 있을 때) 자동 실행됩니다.
+  # 이미 운영 중인 클러스터에는 영향 없으며, 신규 배포 환경 전용입니다.
+  # IF NOT EXISTS 패턴으로 멱등성을 보장합니다.
+  # ---------------------------------------------------------------------------
+  initdb:
+    scripts:
+      init-harbor-db.sh: |
+        #!/bin/bash
+        set -e
+        echo "=== Harbor database initialization ==="
+        psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "postgres" <<-EOSQL
+          DO \$\$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'harbor_admin') THEN
+              CREATE ROLE harbor_admin WITH LOGIN PASSWORD '${HARBOR_DB_PASSWORD}';
+              RAISE NOTICE 'Role harbor_admin created.';
+            ELSE
+              RAISE NOTICE 'Role harbor_admin already exists, skipping.';
+            END IF;
+          END
+          \$\$;
+
+          SELECT 'CREATE DATABASE harbor_registry OWNER harbor_admin'
+          WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'harbor_registry')\gexec
+
+          GRANT ALL PRIVILEGES ON DATABASE harbor_registry TO harbor_admin;
+        EOSQL
+        echo "=== Harbor database initialization complete ==="
+  extraEnvVars:
+    - name: HARBOR_DB_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: postgres-db-secret
+          key: harbor-password
 volumePermissions:
   enabled: true
