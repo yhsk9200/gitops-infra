@@ -24,11 +24,13 @@ primary:
         #!/bin/bash
         set -e
         echo "=== Harbor database initialization ==="
-        PGPASSWORD="$PG_ADMIN_PASSWORD" psql -v ON_ERROR_STOP=1 --username "postgres" --dbname "postgres" <<-EOSQL
+        export PGPASSWORD=$(cat /run/secrets/db/postgres-password)
+        HARBOR_PW=$(cat /run/secrets/db/harbor-password)
+        psql -v ON_ERROR_STOP=1 --username "postgres" --dbname "postgres" <<-EOSQL
           DO \$\$
           BEGIN
             IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'harbor_admin') THEN
-              CREATE ROLE harbor_admin WITH LOGIN PASSWORD '${HARBOR_DB_PASSWORD}';
+              CREATE ROLE harbor_admin WITH LOGIN PASSWORD '$HARBOR_PW';
               RAISE NOTICE 'Role harbor_admin created.';
             ELSE
               RAISE NOTICE 'Role harbor_admin already exists, skipping.';
@@ -41,17 +43,16 @@ primary:
 
           GRANT ALL PRIVILEGES ON DATABASE harbor_registry TO harbor_admin;
         EOSQL
+        unset PGPASSWORD
         echo "=== Harbor database initialization complete ==="
-  extraEnvVars:
-    - name: PG_ADMIN_PASSWORD
-      valueFrom:
-        secretKeyRef:
-          name: postgres-db-secret
-          key: postgres-password
-    - name: HARBOR_DB_PASSWORD
-      valueFrom:
-        secretKeyRef:
-          name: postgres-db-secret
-          key: harbor-password
+  extraVolumes:
+    - name: db-secrets
+      secret:
+        secretName: postgres-db-secret
+  extraVolumeMounts:
+    - name: db-secrets
+      mountPath: /run/secrets/db
+      readOnly: true
 volumePermissions:
   enabled: true
+
