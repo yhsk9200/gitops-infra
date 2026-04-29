@@ -24,7 +24,7 @@ primary:
         #!/bin/bash
         set -e
         echo "=== Harbor database initialization ==="
-        psql -v ON_ERROR_STOP=1 --username "postgres" --dbname "postgres" <<-EOSQL
+        PGPASSWORD="$PG_ADMIN_PASSWORD" psql -v ON_ERROR_STOP=1 --username "postgres" --dbname "postgres" <<-EOSQL
           DO \$\$
           BEGIN
             IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'harbor_admin') THEN
@@ -43,6 +43,11 @@ primary:
         EOSQL
         echo "=== Harbor database initialization complete ==="
   extraEnvVars:
+    - name: PG_ADMIN_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: postgres-db-secret
+          key: postgres-password
     - name: HARBOR_DB_PASSWORD
       valueFrom:
         secretKeyRef:
