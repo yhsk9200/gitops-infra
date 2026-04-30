@@ -1,30 +1,81 @@
-# --- 공통 설정 부분 ---
+# =============================================================================
+# Keycloak values template for a future production exposure
+# =============================================================================
+# This file is intentionally not used by the current Argo CD Application.
+# Fill the TODO values after the production domain, TLS, and redirect URI plan
+# are confirmed.
+# =============================================================================
+
 global:
   security:
     allowInsecureImages: true
+
 image:
   registry: docker.io
   repository: bitnamilegacy/keycloak
   tag: 26.3.3-debian-12-r0
+
 auth:
-  adminUser: "admin"
-  existingSecret: "keycloak-admin-secret"
-  passwordSecretKey: "admin-password"
+  adminUser: admin
+  existingSecret: keycloak-admin-secret
+  passwordSecretKey: admin-password
+
 postgresql:
   enabled: false
+
 externalDatabase:
-  host: "platform-db-postgres-postgresql.platform-db.svc.cluster.local"
+  host: platform-db-postgres-postgresql.platform-db.svc.cluster.local
   port: 5432
-  user: "keycloak_admin"
-  database: "keycloak_db"
-  existingSecret: "keycloak-db-secret"
-  existingSecretPasswordKey: "keycloak-password"
-# 리버스 프록시 인식 활성화
-proxy: edge
-# Ingress 노출 설정
+  user: keycloak_admin
+  database: keycloak_db
+  existingSecret: keycloak-db-secret
+  existingSecretPasswordKey: keycloak-password
+
+production: true
+proxyHeaders: xforwarded
+hostnameStrict: true
+httpEnabled: true
+
 ingress:
   enabled: true
   ingressClassName: traefik
-  hostname: auth.210.113.225.245.nip.io
+  hostname: auth.example.com
+  tls: true
   annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: web
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    cert-manager.io/cluster-issuer: TODO_CLUSTER_ISSUER
+
+automountServiceAccountToken: false
+
+serviceAccount:
+  create: true
+  automountServiceAccountToken: false
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+logging:
+  output: default
+  level: INFO
+
+metrics:
+  enabled: false
+  serviceMonitor:
+    enabled: false
+
+# Enable only after the realm/client/role JSON files are reviewed.
+keycloakConfigCli:
+  enabled: false
+
+# Start permissive and tighten after CNI support and traffic paths are verified.
+networkPolicy:
+  enabled: true
+  allowExternal: true
+  allowExternalEgress: true
