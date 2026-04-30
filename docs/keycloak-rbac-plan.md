@@ -73,6 +73,8 @@
 - redirect URI 규칙
 - 운영자 계정 생성 방식
 
+현재 단계에서는 `docs/keycloak-manual-rbac-checklist.md`를 기준으로 수동 설정을 먼저 검증합니다. 이 체크리스트가 안정화되면 같은 내용을 `keycloakConfigCli` 설정으로 옮깁니다.
+
 ## 수동 변경 기록
 
 Keycloak UI에서 수동 변경을 했다면 아래 표에 기록합니다.

@@ -173,3 +173,8 @@ kubectl logs -n platform-iam statefulset/platform-iam-keycloak --tail=200
 - 운영 전환 전에는 prod values를 그대로 적용하지 말고 TODO 값을 먼저 채웁니다.
 - realm, client, role 변경은 수동으로 하더라도 반드시 문서에 남깁니다.
 - 반복 배포가 필요해지면 `keycloakConfigCli`를 검토합니다.
+
+## 관련 문서
+
+- `docs/keycloak-rbac-plan.md`: Keycloak realm/client/role/group 설계 초안
+- `docs/keycloak-manual-rbac-checklist.md`: 도메인 없이 진행 가능한 수동 RBAC 설정 체크리스트
