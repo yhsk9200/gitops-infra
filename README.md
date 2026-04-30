@@ -172,10 +172,17 @@ Harbor metrics와 exporter는 활성화되어 있으며, Prometheus는 Harbor ch
 - `docs/platform-observability-checklist.md`
 - `docs/platform-alerting-todo.md`
 
+### Backup/Restore
+
+현재 단계에서는 백업 저장소와 보관 정책이 확정되지 않았으므로 자동 백업 CronJob은 아직 배포하지 않습니다. PostgreSQL, Harbor registry PVC, Sealed Secrets controller key를 중심으로 수동 백업/복구 절차를 먼저 검증합니다.
+
+- `docs/platform-backup-restore-runbook.md`
+
 ## 9. 다음 작업 후보
 
 - Platform alerting rule과 Alertmanager receiver 설계
 - Harbor 외부 push/pull 최종 검증
+- 백업 저장소와 보관 정책 확정 후 백업 CronJob 자동화
 - Keycloak 도메인/TLS 확정 후 prod values 적용
 - Keycloak SSO client와 redirect URI 설정
 - 반복 배포가 필요해질 경우 `keycloakConfigCli` 자동화 검토
