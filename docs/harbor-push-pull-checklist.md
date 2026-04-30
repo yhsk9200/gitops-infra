@@ -26,6 +26,7 @@ kubectl get svc -n platform-registry
 정상 기준:
 
 - Harbor 관련 pod가 `Running` / `Ready` 상태입니다.
+- Harbor exporter pod가 `Running` / `Ready` 상태입니다.
 - Harbor UI에 접속할 수 있습니다.
 - `platform-registry-harbor`가 `Healthy` 상태입니다.
 - `Healthy + OutOfSync`는 README의 Harbor 운영 메모에 기록된 known diff일 수 있습니다.

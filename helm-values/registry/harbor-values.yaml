@@ -77,9 +77,9 @@ trivy:
       memory: 1Gi
 
 metrics:
-  enabled: false
+  enabled: true
   serviceMonitor:
-    enabled: false
+    enabled: true
 
 core:
   resources:
@@ -108,9 +108,8 @@ registry:
       cpu: 500m
       memory: 512Mi
 
-# Keep exporter disabled until Harbor finishes a clean bootstrap.
 exporter:
-  replicas: 0
+  replicas: 1
 
 # Harbor OIDC can be configured later from the Harbor UI after Keycloak is ready.
 notary:

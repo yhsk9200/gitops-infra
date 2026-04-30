@@ -161,6 +161,8 @@ Push/pull 검증은 아래 문서를 따릅니다.
 
 - `docs/harbor-push-pull-checklist.md`
 
+Harbor metrics와 exporter는 활성화되어 있으며, Prometheus는 Harbor chart가 생성하는 ServiceMonitor를 수집합니다.
+
 ### Observability
 
 메트릭은 Prometheus/Grafana, 로그는 Loki/Alloy로 수집합니다. 배포 후 로그 수집과 Grafana Explore 동작은 아래 문서로 점검합니다.
