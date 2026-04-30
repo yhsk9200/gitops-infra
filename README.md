@@ -229,4 +229,6 @@ Harbor 정상 여부는 ArgoCD `Synced` 상태만으로 판단하지 말고 아�
 
 또한 TLS를 사용하지 않는 HTTP 레지스트리 구성이므로, 외부 Docker 클라이언트에서는 `harbor.210.113.225.245.nip.io:22280` 를 insecure registry로 허용해야 push / pull 테스트가 정상 동작할 수 있습니다.
 
+외부 Docker 클라이언트에서 push / pull을 검증할 때는 `docs/harbor-push-pull-checklist.md`를 기준으로 확인합니다.
+
 향후 Harbor chart 업그레이드나 secret 구조 변경 후 diff 양상이 바뀌면, 그때 다시 `ignoreDifferences` 적용 여부를 검토합니다.
