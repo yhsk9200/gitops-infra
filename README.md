@@ -168,10 +168,11 @@ Harbor metrics와 exporter는 활성화되어 있으며, Prometheus는 Harbor ch
 메트릭은 Prometheus/Grafana, 로그는 Loki/Alloy로 수집합니다. 배포 후 로그 수집과 Grafana Explore 동작은 아래 문서로 점검합니다.
 
 - `docs/platform-observability-checklist.md`
+- `docs/platform-alerting-todo.md`
 
 ## 9. 다음 작업 후보
 
-- Harbor metrics/exporter 재활성화 검토
+- Platform alerting rule과 Alertmanager receiver 설계
 - Keycloak 도메인/TLS 확정 후 prod values 적용
 - Keycloak SSO client와 redirect URI 설정
 - 반복 배포가 필요해질 경우 `keycloakConfigCli` 자동화 검토
