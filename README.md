@@ -131,7 +131,9 @@ kubeseal --fetch-cert \
 
 현재 Keycloak은 도메인이 없는 dev/internal 구성을 사용합니다. 실제 ArgoCD 앱은 `helm-values/iam/keycloak-values-dev.yaml`을 참조합니다.
 
-도메인과 TLS가 확정되기 전까지는 Ingress, strict hostname, OIDC client redirect URI를 확정하지 않습니다. 수동 RBAC 기준과 운영 절차는 아래 문서를 따릅니다.
+도메인과 TLS가 확정되기 전까지는 Ingress, strict hostname, OIDC client redirect URI를 확정하지 않습니다. 80/443 외부 포트가 열려 있더라도 Keycloak 관리자 콘솔은 우선 port-forward로 검증합니다.
+
+수동 RBAC 기준과 운영 절차는 아래 문서를 따릅니다.
 
 - `docs/keycloak-operations.md`
 - `docs/keycloak-rbac-plan.md`
@@ -146,13 +148,13 @@ kubeseal --fetch-cert \
 외부 접속 주소:
 
 ```text
-http://harbor.210.113.225.245.nip.io:22280
+http://harbor.210.113.225.245.nip.io
 ```
 
 HTTP 레지스트리이므로 외부 Docker 클라이언트에서는 아래 주소를 insecure registry로 허용해야 합니다.
 
 ```text
-harbor.210.113.225.245.nip.io:22280
+harbor.210.113.225.245.nip.io
 ```
 
 Harbor는 chart 특성상 `Healthy + OutOfSync`로 남을 수 있습니다. Harbor UI 접속, pod readiness, push/pull, external PostgreSQL 연결이 정상이라면 known diff로 간주합니다.
@@ -173,6 +175,7 @@ Harbor metrics와 exporter는 활성화되어 있으며, Prometheus는 Harbor ch
 ## 9. 다음 작업 후보
 
 - Platform alerting rule과 Alertmanager receiver 설계
+- Harbor 외부 push/pull 최종 검증
 - Keycloak 도메인/TLS 확정 후 prod values 적용
 - Keycloak SSO client와 redirect URI 설정
 - 반복 배포가 필요해질 경우 `keycloakConfigCli` 자동화 검토

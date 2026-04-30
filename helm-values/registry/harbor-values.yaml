@@ -11,8 +11,8 @@ expose:
   tls:
     enabled: false
 
-# External clients reach Harbor through the firewall/NAT on port 22280.
-externalURL: http://harbor.210.113.225.245.nip.io:22280
+# External clients reach Harbor through the ingress on standard HTTP port 80.
+externalURL: http://harbor.210.113.225.245.nip.io
 
 updateStrategy:
   type: Recreate
