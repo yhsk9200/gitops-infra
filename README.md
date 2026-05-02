@@ -178,6 +178,12 @@ Harbor metrics와 exporter는 활성화되어 있으며, Prometheus는 Harbor ch
 
 - `docs/platform-backup-restore-runbook.md`
 
+### Architecture Decisions
+
+시뮬레이터, AI 모델 저장소, MLflow/MinIO 조합처럼 아직 배포 리소스로 확정되지 않은 의사결정은 ADR 문서로 별도 기록합니다.
+
+- `docs/adr/0001-ai-model-simulator-platform.md`
+
 ## 9. 다음 작업 후보
 
 - Platform alerting rule과 Alertmanager receiver 설계
