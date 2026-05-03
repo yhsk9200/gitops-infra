@@ -174,7 +174,7 @@ Harbor metrics와 exporter는 활성화되어 있으며, Prometheus는 Harbor ch
 
 ### Backup/Restore
 
-현재 단계에서는 백업 저장소와 보관 정책이 확정되지 않았으므로 자동 백업 CronJob은 아직 배포하지 않습니다. PostgreSQL, Harbor registry PVC, Sealed Secrets controller key를 중심으로 수동 백업/복구 절차를 먼저 검증합니다.
+현재 단계에서는 k3s 서버와 사내 Synology NAS가 완전히 별도 망에 있으므로 자동 백업 반출이나 NAS PV mount는 도입하지 않습니다. 1차 정책은 로컬 백업 세트 생성, checksum/manifest 검증, 수동 NAS 반출입니다.
 
 - `docs/platform-backup-restore-runbook.md`
 
@@ -188,7 +188,7 @@ Harbor metrics와 exporter는 활성화되어 있으며, Prometheus는 Harbor ch
 
 - Platform alerting rule과 Alertmanager receiver 설계
 - Harbor 외부 push/pull 최종 검증
-- 백업 저장소와 보관 정책 확정 후 백업 CronJob 자동화
+- 로컬 백업 세트 생성 스크립트화와 수동 NAS 반출 리허설
 - Keycloak 도메인/TLS 확정 후 prod values 적용
 - Keycloak SSO client와 redirect URI 설정
 - 반복 배포가 필요해질 경우 `keycloakConfigCli` 자동화 검토
