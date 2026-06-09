@@ -14,7 +14,7 @@ spec:
       helm:
         valueFiles:
           - $values/helm-values/monitoring/loki-values.yaml
-    - repoURL: https://gitlab.am.micube.dev/daegu-tp/mfg-data-platform/gitops/platform-infra.git
+    - repoURL: https://github.com/yhsk9200/gitops-infra.git
       targetRevision: main
       ref: values
   destination:

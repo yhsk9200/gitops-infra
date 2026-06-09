@@ -8,7 +8,7 @@ metadata:
 spec:
   description: "Platform shared infrastructure project"
   sourceRepos:
-    - https://gitlab.am.micube.dev/daegu-tp/mfg-data-platform/gitops/platform-infra.git
+    - https://github.com/yhsk9200/gitops-infra.git
     - https://charts.bitnami.com/bitnami
     - oci://registry-1.docker.io/bitnamicharts
     - https://helm.goharbor.io

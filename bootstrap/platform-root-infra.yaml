@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: "https://gitlab.am.micube.dev/daegu-tp/mfg-data-platform/gitops/platform-infra.git"
+    repoURL: "https://github.com/yhsk9200/gitops-infra.git"
     targetRevision: main
     path: apps
   destination:
