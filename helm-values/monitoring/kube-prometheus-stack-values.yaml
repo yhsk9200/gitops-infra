@@ -34,6 +34,8 @@ grafana:
       enabled: true
       searchNamespace: ALL
 
+  # Loki는 on-demand(apps-ondemand/, ADR-0004)라 평소엔 미가동.
+  # 데이터소스 배선은 유지해 Loki를 띄우면 추가 설정 없이 바로 연결됩니다.
   additionalDataSources:
     - name: Loki
       uid: loki
@@ -47,7 +49,9 @@ grafana:
 
 prometheus:
   prometheusSpec:
-    retention: 15d
+    # 12GB 단일 노드 리핏(ADR-0004): retention/메모리/스토리지를 축소.
+    # 메트릭은 lean하게 상시 가동(라이브 모니터링 유지), 로그(Loki/Alloy)는 on-demand.
+    retention: 5d
 
     storageSpec:
       volumeClaimTemplate:
@@ -57,15 +61,15 @@ prometheus:
             - ReadWriteOnce
           resources:
             requests:
-              storage: 50Gi
+              storage: 20Gi
 
     resources:
       requests:
         cpu: 200m
-        memory: 512Mi
+        memory: 384Mi
       limits:
         cpu: "1"
-        memory: 2Gi
+        memory: 1Gi
 
     serviceMonitorSelectorNilUsesHelmValues: false
     podMonitorSelectorNilUsesHelmValues: false

@@ -5,13 +5,13 @@
 현재 Harbor 외부 접속 주소:
 
 ```text
-http://harbor.210.113.225.245.nip.io
+http://harbor.158.179.169.201.nip.io
 ```
 
 Docker registry 주소:
 
 ```text
-harbor.210.113.225.245.nip.io
+harbor.158.179.169.201.nip.io
 ```
 
 ## 1. Harbor 상태 확인
@@ -42,7 +42,7 @@ kubectl get configmap platform-registry-harbor-core -n platform-registry -o yaml
 기대값:
 
 ```text
-EXT_ENDPOINT: http://harbor.210.113.225.245.nip.io
+EXT_ENDPOINT: http://harbor.158.179.169.201.nip.io
 ```
 
 core pod 내부 설정도 확인할 수 있습니다.
@@ -57,7 +57,7 @@ kubectl exec -it <harbor-core-pod> -n platform-registry -c core -- sh -c 'env | 
 현재 Harbor는 HTTP로 노출되어 있습니다. 외부 Docker 클라이언트에서 아래 registry를 insecure registry로 허용해야 합니다.
 
 ```text
-harbor.210.113.225.245.nip.io
+harbor.158.179.169.201.nip.io
 ```
 
 Linux Docker 예시:
@@ -70,7 +70,7 @@ sudo vi /etc/docker/daemon.json
 ```json
 {
   "insecure-registries": [
-    "harbor.210.113.225.245.nip.io"
+    "harbor.158.179.169.201.nip.io"
   ]
 }
 ```
@@ -112,7 +112,7 @@ push-test
 ## 5. Docker 로그인
 
 ```bash
-docker login harbor.210.113.225.245.nip.io
+docker login harbor.158.179.169.201.nip.io
 ```
 
 관리자 계정:
@@ -138,15 +138,15 @@ Login Succeeded
 
 ```bash
 docker pull busybox:latest
-docker tag busybox:latest harbor.210.113.225.245.nip.io/library/busybox:push-test
-docker push harbor.210.113.225.245.nip.io/library/busybox:push-test
+docker tag busybox:latest harbor.158.179.169.201.nip.io/library/busybox:push-test
+docker push harbor.158.179.169.201.nip.io/library/busybox:push-test
 ```
 
 별도 프로젝트를 사용한다면 `library` 대신 해당 프로젝트명을 사용합니다.
 
 ```bash
-docker tag busybox:latest harbor.210.113.225.245.nip.io/push-test/busybox:push-test
-docker push harbor.210.113.225.245.nip.io/push-test/busybox:push-test
+docker tag busybox:latest harbor.158.179.169.201.nip.io/push-test/busybox:push-test
+docker push harbor.158.179.169.201.nip.io/push-test/busybox:push-test
 ```
 
 정상 기준:
@@ -159,8 +159,8 @@ docker push harbor.210.113.225.245.nip.io/push-test/busybox:push-test
 로컬 이미지를 지운 뒤 Harbor에서 다시 pull 합니다.
 
 ```bash
-docker rmi harbor.210.113.225.245.nip.io/library/busybox:push-test
-docker pull harbor.210.113.225.245.nip.io/library/busybox:push-test
+docker rmi harbor.158.179.169.201.nip.io/library/busybox:push-test
+docker pull harbor.158.179.169.201.nip.io/library/busybox:push-test
 ```
 
 정상 기준:
@@ -177,7 +177,7 @@ docker pull harbor.210.113.225.245.nip.io/library/busybox:push-test
 
 확인:
 
-- Docker daemon의 `insecure-registries`에 `harbor.210.113.225.245.nip.io`가 들어 있는지 확인합니다.
+- Docker daemon의 `insecure-registries`에 `harbor.158.179.169.201.nip.io`가 들어 있는지 확인합니다.
 - Docker daemon 또는 Docker Desktop을 재시작했는지 확인합니다.
 
 ### `unauthorized` 또는 `authentication required`
@@ -190,8 +190,8 @@ docker pull harbor.210.113.225.245.nip.io/library/busybox:push-test
 확인:
 
 ```bash
-docker logout harbor.210.113.225.245.nip.io
-docker login harbor.210.113.225.245.nip.io
+docker logout harbor.158.179.169.201.nip.io
+docker login harbor.158.179.169.201.nip.io
 ```
 
 Harbor UI에서 프로젝트와 사용자 권한을 확인합니다.
@@ -222,7 +222,7 @@ kubectl get configmap platform-registry-harbor-core -n platform-registry -o yaml
 확인:
 
 ```bash
-curl -I http://harbor.210.113.225.245.nip.io
+curl -I http://harbor.158.179.169.201.nip.io
 ```
 
 조치:

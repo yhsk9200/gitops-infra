@@ -1,9 +1,0 @@
-architecture: standalone
-auth:
-  existingSecret: "redis-secret"
-  existingSecretPasswordKey: "redis-password"
-master:
-  persistence:
-    existingClaim: redis-pvc
-volumePermissions:
-  enabled: true

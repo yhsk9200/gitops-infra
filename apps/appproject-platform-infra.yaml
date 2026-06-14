@@ -9,7 +9,6 @@ spec:
   description: "Platform shared infrastructure project"
   sourceRepos:
     - https://github.com/yhsk9200/gitops-infra.git
-    - https://charts.bitnami.com/bitnami
     - oci://registry-1.docker.io/bitnamicharts
     - https://helm.goharbor.io
     - https://bitnami-labs.github.io/sealed-secrets

@@ -1,23 +1,25 @@
 # 클러스터 재구축 런북 — 단일 노드 Clean Install
 
-이 문서는 개인 OCI 단일 노드(4 OCPU / 24GB)에 `platform-infra` 스택을 **새 시크릿으로 깨끗하게** 재구축하는 절차입니다. 토폴로지 결정 근거는 `docs/adr/0002-single-node-cluster-topology.md`를 참조합니다.
+이 문서는 개인 OCI 단일 노드(2 OCPU / 12GB — Always Free 축소 반영, ADR-0004)에 `platform-infra` 스택을 **새 시크릿으로 깨끗하게** 재구축하는 절차입니다. 토폴로지 결정 근거는 `docs/adr/0002-single-node-cluster-topology.md`, 자원 리핏은 `docs/adr/0004-refit-platform-for-12gb-free-tier.md`를 참조합니다.
 
-> 이전 회사 환경(`210.113.225.245:22222`, 2-node)과는 별개의 새 클러스터입니다. 기존 SealedSecret은 옛 클러스터 공개키로 암호화되어 있어 그대로 쓸 수 없고, 새 비밀번호를 생성해 reseal합니다.
+> 이전 2-node 구성과는 별개의 새 클러스터입니다. 기존 SealedSecret은 옛 클러스터 공개키로 암호화되어 있어 그대로 쓸 수 없고, 새 비밀번호를 생성해 reseal합니다.
 
 ## 플레이스홀더
 
-| 표기 | 의미 |
-|---|---|
-| `<NODE_IP>` | 새 OCI 단일 노드 공인 IP |
-| `<NODE_NIP>` | `harbor.<NODE_IP>.nip.io` 형태의 Harbor 외부 호스트 |
+아래 명령 예시는 절차 템플릿이라 `<NODE_IP>`/`<NODE_NIP>` 표기를 유지한다. 현재 클러스터의 확정값은 표에 함께 기재한다.
+
+| 표기 | 의미 | 현재 클러스터 값 |
+|---|---|---|
+| `<NODE_IP>` | 새 OCI 단일 노드 공인 IP | `158.179.169.201` |
+| `<NODE_NIP>` | `harbor.<NODE_IP>.nip.io` 형태의 Harbor 외부 호스트 | `harbor.158.179.169.201.nip.io` |
 
 ---
 
-## Phase 0 — OCI 노드 준비 (콘솔, 수동)
+## Phase 0 — OCI 노드 준비 (콘솔, 수동) — ✅ 완료
 
-- 기존 2 인스턴스 정리 → **4 OCPU / 24GB 단일 인스턴스** 재구성
+- 기존 2 인스턴스 정리 → **2 OCPU / 12GB 단일 인스턴스** 재구성 (Always Free 축소 반영, ADR-0004. grandfather로 4/24가 잡히면 `nproc; free -h`로 확인 후 ADR-0004 재검토 조건 참조)
 - 부트 볼륨 용량 확인 (local-path PV가 노드 디스크를 사용. Harbor registry PVC가 500Gi 요청이지만 local-path는 용량을 강제하지 않아 bind는 됨 — 실제 사용량이 디스크를 넘지 않도록 주의)
-- 산출물: `<NODE_IP>`, SSH 접속 확인 (포트 22, `~/.ssh/id_rsa`)
+- 산출물: `<NODE_IP>` = `158.179.169.201` (발급 완료), SSH 접속 확인 (포트 22, `~/.ssh/id_rsa`)
 
 ---
 
@@ -54,14 +56,14 @@ curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.32.x+k3s1" sh -
 ```bash
 # k3s.yaml 가져오기 (root:600 이므로 노드에서 사용자 소유 임시본 경유)
 ssh ubuntu@<NODE_IP> 'sudo cp /etc/rancher/k3s/k3s.yaml /tmp/k3s.yaml && sudo chown ubuntu /tmp/k3s.yaml'
-scp ubuntu@<NODE_IP>:/tmp/k3s.yaml ~/.kube/dgtp-oci.yaml
+scp ubuntu@<NODE_IP>:/tmp/k3s.yaml ~/.kube/oci-platform.yaml
 ssh ubuntu@<NODE_IP> 'rm -f /tmp/k3s.yaml'
-kubectl --kubeconfig ~/.kube/dgtp-oci.yaml config rename-context default dgtp-oci
+kubectl --kubeconfig ~/.kube/oci-platform.yaml config rename-context default oci-platform
 # server: https://127.0.0.1:6443 그대로 유지 (인증서 SAN 일치)
 
 # 터널 기동
 ssh -N -L 6443:127.0.0.1:6443 ubuntu@<NODE_IP> &
-export KUBECONFIG=~/.kube/dgtp-oci.yaml
+export KUBECONFIG=~/.kube/oci-platform.yaml
 kubectl get nodes   # 노드 1개 Ready
 ```
 
@@ -69,18 +71,14 @@ kubectl get nodes   # 노드 1개 Ready
 
 ## Phase 3 — GitOps 부트스트랩 (핵심)
 
-### 3.1 repoURL: 회사 GitLab → 개인 GitHub 전환 (선행 필수)
+### 3.1 repoURL 전환 — ✅ 완료
 
-manifests의 `repoURL`이 14곳에서 회사 GitLab(`gitlab.am.micube.dev`)을 가리킨다. 개인 OCI ArgoCD는 사내 GitLab에 접근 못 하므로 **GitHub(`https://github.com/yhsk9200/gitops-infra.git`)로 전환**한다.
-
-대상 파일:
-- `bootstrap/platform-root-infra.yaml`
-- `apps/platform-infra-namespaces.yaml`, `apps/platform-infra-secrets.yaml`, `apps/platform-infra-storage.yaml`
-- `$values` 멀티소스 8개: `apps/platform-system-sealed-secrets.yaml`, `apps/platform-db-postgres.yaml`, `apps/platform-db-redis.yaml`, `apps/platform-iam-keycloak.yaml`, `apps/platform-monitoring-prometheus.yaml`, `apps/platform-monitoring-loki.yaml`, `apps/platform-monitoring-alloy.yaml`, `apps/platform-registry-harbor.yaml`
+**(2026-06 완료)** Git repoURL 14곳은 GitHub(`https://github.com/yhsk9200/gitops-infra.git`) 기준으로 정리 완료(커밋 `4d239a2`). Bitnami 차트 repoURL(postgres/keycloak)도 `charts.bitnami.com` 폐쇄(403)에 따라 `oci://registry-1.docker.io/bitnamicharts`로 전환했고, 이미지 태그는 `bitnamilegacy/*` 고정 태그로 핀 고정했다 (`helm-values/database/postgres-values.yaml` 주석 참조). 공용 redis는 ADR-0003으로 제거됨.
 
 확인 사항:
 - GitHub 레포가 **public이면** ArgoCD 익명 clone 가능. **private이면** ArgoCD에 repo credential(PAT) 등록 필요.
 - 모든 앱 `targetRevision: main` → GitHub 기본 브랜치 `main`과 일치.
+- `oci://` 스킴 repoURL은 ArgoCD 3.x 기준 — 3.2의 stable 매니페스트 설치면 충족.
 
 ### 3.2 ArgoCD 설치
 
@@ -98,12 +96,12 @@ Root App을 적용하면 wave -2에서 컨트롤러가 뜨며 **새 키쌍을 �
 
 ```bash
 kubeseal --fetch-cert \
-  --controller-name=sealed-secrets \
+  --controller-name=sealed-secrets-controller \
   --controller-namespace=platform-system \
   > pub-cert.pem
 ```
 
-> `controller-name`은 차트 release 이름에 따름 — `helm-values/system/sealed-secrets-values.yaml`과 실제 배포된 서비스명으로 확인.
+> `controller-name`은 `helm-values/system/sealed-secrets-values.yaml`의 `fullnameOverride: sealed-secrets-controller`를 따름 — 실제 배포된 서비스명으로 재확인.
 
 ### 3.4 새 시크릿 생성 + reseal
 
@@ -114,7 +112,6 @@ gen() { tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "${1:-32}"; echo; }
 POSTGRES_PW=$(gen 32)
 KEYCLOAK_PW=$(gen 32)      # postgres-db-secret + keycloak-db-secret 공유
 HARBOR_DB_PW=$(gen 32)     # postgres-db-secret(harbor-password) + harbor-db-secret(password) 공유
-REDIS_PW=$(gen 32)
 KEYCLOAK_ADMIN_PW=$(gen 32)
 GRAFANA_PW=$(gen 32)
 HARBOR_ADMIN_PW=$(gen 32)
@@ -128,7 +125,6 @@ HARBOR_CORE_KEY=$(openssl rand -hex 8)   # 반드시 16자
 | `postgres-sealed-secret.yaml` | `postgres-db-secret` / platform-db | `postgres-password`, ★`keycloak-password`, ★`harbor-password` |
 | `keycloak-db-sealed-secret.yaml` | `keycloak-db-secret` / platform-iam | ★`keycloak-password` (= 위 keycloak-password) |
 | `keycloak-sealed-secret.yaml` | `keycloak-admin-secret` / platform-iam | `admin-password` |
-| `redis-sealed-secret.yaml` | `redis-secret` / platform-db | `redis-password` |
 | `grafana-sealed-secret.yaml` | `grafana-admin-secret` / platform-monitoring | `admin-user`(=admin), `admin-password` |
 | `harbor-sealed-secret.yaml` | `harbor-admin-secret` / platform-registry | `admin-password` |
 | `harbor-sealed-secret.yaml` | `harbor-core-secret` / platform-registry | `secretKey` (16자) |
@@ -156,12 +152,6 @@ kubectl create secret generic keycloak-admin-secret --namespace=platform-iam \
   --from-literal=admin-password="$KEYCLOAK_ADMIN_PW" \
   --dry-run=client -o yaml | kubeseal --cert pub-cert.pem --format=yaml \
   > manifests/security/keycloak-sealed-secret.yaml
-
-# redis-secret
-kubectl create secret generic redis-secret --namespace=platform-db \
-  --from-literal=redis-password="$REDIS_PW" \
-  --dry-run=client -o yaml | kubeseal --cert pub-cert.pem --format=yaml \
-  > manifests/security/redis-sealed-secret.yaml
 
 # grafana-admin-secret (user+password)
 kubectl create secret generic grafana-admin-secret --namespace=platform-monitoring \
@@ -202,21 +192,20 @@ kubectl -n argocd get applications -w
 
 ---
 
-## Phase 4 — IP 교체 + 문서 갱신
+## Phase 4 — IP 교체 + 문서 갱신 — ✅ 완료 (`158.179.169.201`)
 
-### config (동작 영향)
+노드 IP가 `158.179.169.201`로 확정되어, 동작에 영향을 주는 config와 운영 문서·README의 호스트/주소를 실제 IP로 치환했다. 본 런북은 재사용 가능한 절차 템플릿이므로 명령 예시에는 `<NODE_IP>` 표기를 그대로 둔다(상단 플레이스홀더 표에 확정값 기재).
+
+### config (동작 영향) — 치환 완료
 - `helm-values/registry/harbor-values.yaml`
-  - `expose.ingress.hosts.core: <NODE_NIP>`
-  - `externalURL: http://<NODE_NIP>`
+  - `expose.ingress.hosts.core: harbor.158.179.169.201.nip.io`
+  - `externalURL: http://harbor.158.179.169.201.nip.io`
 
-### 문서 (옛 IP/포트 → 새 값)
-- `README.md` (Harbor 주소 2곳)
-- `CLAUDE.md` (클러스터 환경 표: 서버 IP, SSH 포트 22, Harbor URL; 셋업 스니펫의 IP/포트/키 이름)
-- `docs/cluster-access-kubeconfig.md` (호스트/포트, 키 이름; 방식 B·`127.0.0.1:6443`은 유지)
-- `docs/harbor-push-pull-checklist.md` (다수)
-- `docs/platform-backup-restore-runbook.md` (Harbor 검증 명령 3곳)
+### 문서 — 치환 완료
 
-> 일괄 치환 주의: 단순 sed 치환 전 위 목록으로 범위 확인. 포트는 22222→22, IP는 210.113.225.245→`<NODE_IP>`, 키 이름은 실제 사용 키(`id_rsa`)로.
+README, `docs/cluster-access-kubeconfig.md`, `docs/harbor-push-pull-checklist.md`, `docs/platform-backup-restore-runbook.md`의 호스트/주소를 실제 IP로 치환하고 CLAUDE.md 상태도 갱신했다.
+
+> 향후 노드 IP가 다시 바뀌면 config(harbor-values)와 위 운영 문서의 호스트를 새 IP로 갱신한다 (`grep -rln '158.179.169.201'`로 범위 확인 후 sed).
 
 ---
 
@@ -224,14 +213,15 @@ kubectl -n argocd get applications -w
 
 - [ ] `kubectl get nodes` → 1 Ready
 - [ ] `kubectl -n argocd get applications` → 전부 Synced/Healthy (Harbor는 `Healthy+OutOfSync` known diff 허용)
-- [ ] Postgres/Redis/Keycloak Pod Ready, Keycloak 콘솔 port-forward 접속
-- [ ] Grafana 접속(새 admin 비번), Explore에서 Loki 로그 조회
+- [ ] Postgres/Keycloak Pod Ready, Keycloak 콘솔 port-forward 접속
+- [ ] Harbor가 external PostgreSQL(platform-db)에 연결 (core pod 로그에 DB 오류 없음)
+- [ ] Grafana 접속(새 admin 비번), 메트릭 대시보드 표시
+- [ ] (선택, on-demand) `kubectl apply -f apps-ondemand/` 후 Grafana Explore에서 Loki 로그 조회 → 확인 후 `kubectl delete -f apps-ondemand/`
 - [ ] Harbor UI 접속(`http://<NODE_NIP>`), 외부 push/pull (`docs/harbor-push-pull-checklist.md`)
 - [ ] Prometheus가 Harbor ServiceMonitor 수집
 
 ## 리스크 / 주의
 
-- **단일 노드 자원**: 무거운 스택(kube-prometheus-stack, Harbor+Trivy). 메모리 압박 시 Trivy `skipUpdate`/스캔 주기, Prometheus retention, 일부 requests 조정 검토.
+- **단일 노드 자원(12GB)**: ADR-0004로 이미 리핏됨 — Trivy off, Prometheus retention 5d·limit 1Gi, 로그(Loki/Alloy)는 `apps-ondemand/` on-demand. 상시 추정 ~6Gi. 추가 압박 시 keycloak/harbor requests 추가 조정 검토. on-demand 컴포넌트는 동시 부하 시간대를 피해 기동.
 - **디스크**: local-path PV는 노드 디스크 공유. Harbor registry 사용량 모니터링.
 - **백업**: 단일 노드 단일 장애점 → `docs/platform-backup-restore-runbook.md` 백업 주기 준수.
-- **repoURL 이원화**: 이 변경은 GitHub 기준. 회사 GitLab 환경과 manifests가 갈라지므로, 회사/개인 운영 분기 정책을 별도로 정한다.

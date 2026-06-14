@@ -43,13 +43,13 @@ k3s API 서버는 `6443/tcp`에서 동작합니다. 이 포트를 OCI Security L
 
 ### B. SSH 터널 + 로컬 kubeconfig — 기본 채택
 
-이미 노드 SSH 접근(`210.113.225.245:22222`, OCI 키)이 있으므로, **추가 인프라 없이** 가장 안전하게 시작할 수 있는 방식입니다.
+이미 노드 SSH 접근(`158.179.169.201:22`, OCI 키)이 있으므로, **추가 인프라 없이** 가장 안전하게 시작할 수 있는 방식입니다.
 
 핵심 아이디어: API 6443은 노드 로컬(`127.0.0.1`)에만 열어두고, SSH 로컬 포트 포워딩으로 운영자 PC의 `localhost:6443`을 노드의 `localhost:6443`에 연결합니다. kubeconfig의 `server`는 `https://127.0.0.1:6443`을 그대로 두면 인증서 SAN(`127.0.0.1`은 k3s 기본 SAN에 포함)과도 어긋나지 않습니다.
 
 ```text
 [운영자 PC] kubectl → localhost:6443
-        │ (SSH 암호화 터널, 포트 22222)
+        │ (SSH 암호화 터널, 포트 22)
         ▼
 [k3s 노드] 127.0.0.1:6443 → kube-apiserver
 ```
@@ -92,10 +92,10 @@ sudo cat /etc/rancher/k3s/k3s.yaml
 ### 2. 로컬로 안전하게 복사
 
 ```bash
-# 운영자 PC에서 (SCP, 22222 포트)
-scp -i ~/.ssh/aporiax-oci-a1-lab.key -P 22222 \
-  ubuntu@210.113.225.245:/etc/rancher/k3s/k3s.yaml \
-  ~/.kube/dgtp-oci.yaml
+# 운영자 PC에서 (SCP, 22 포트)
+scp -i ~/.ssh/id_rsa -P 22 \
+  ubuntu@158.179.169.201:/etc/rancher/k3s/k3s.yaml \
+  ~/.kube/oci-platform.yaml
 ```
 
 > k3s.yaml은 `root:root 600`인 경우가 많아 일반 사용자 SCP가 막힐 수 있습니다. 그럴 때는 노드에서 `sudo cp`로 사용자 소유 임시본을 만들고 권한을 조정한 뒤 가져오고, 복사 후 임시본을 삭제합니다.
@@ -107,14 +107,14 @@ scp -i ~/.ssh/aporiax-oci-a1-lab.key -P 22222 \
 여러 클러스터를 다룬다면 context/cluster/user 이름이 기본값 `default`로 충돌하므로 구분되게 바꿉니다.
 
 ```bash
-# 예: 컨텍스트 이름을 dgtp-oci로 변경
-kubectl --kubeconfig ~/.kube/dgtp-oci.yaml config rename-context default dgtp-oci
+# 예: 컨텍스트 이름을 oci-platform로 변경
+kubectl --kubeconfig ~/.kube/oci-platform.yaml config rename-context default oci-platform
 ```
 
 ### 4. SSH 터널 기동
 
 ```bash
-ssh -i ~/.ssh/aporiax-oci-a1-lab.key -p 22222 -N -L 6443:127.0.0.1:6443 ubuntu@210.113.225.245
+ssh -i ~/.ssh/id_rsa -p 22 -N -L 6443:127.0.0.1:6443 ubuntu@158.179.169.201
 ```
 
 - `-N`: 원격 명령 없이 포트 포워딩만 수행
@@ -125,7 +125,7 @@ ssh -i ~/.ssh/aporiax-oci-a1-lab.key -p 22222 -N -L 6443:127.0.0.1:6443 ubuntu@2
 ### 5. 연결 검증
 
 ```bash
-export KUBECONFIG=~/.kube/dgtp-oci.yaml
+export KUBECONFIG=~/.kube/oci-platform.yaml
 kubectl get nodes
 kubectl get applications -n argocd
 ```
@@ -158,7 +158,7 @@ kubectl get applications -n argocd
 | 6443 공인 노출 | 컨트롤 플레인 공격 표면 | SSH 터널/VPN만 허용, 6443은 노드 로컬 바인딩 |
 | 잘못된 context로 변경 | 다른 환경 사고 | context 분리/명명, 읽기 전용 기본화 |
 | kubectl 직접 변경으로 GitOps 드리프트 | 상태 불일치 | 변경은 Git 경유, drift는 ArgoCD가 탐지/복구 |
-| SSH 키 유출 | 노드 접근 | 키 회전, 포트 22222 비표준 유지, fail2ban 등 |
+| SSH 키 유출 | 노드 접근 | 키 회전, fail2ban, 필요 시 비표준 포트 전환 |
 
 ## 다음 단계
 

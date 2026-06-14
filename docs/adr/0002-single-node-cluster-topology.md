@@ -8,6 +8,10 @@
 
 2026-06-09
 
+## 개정 (2026-06-14)
+
+> 본 ADR은 Always Free **4 OCPU / 24GB**를 전제로 작성되었으나, 이후 OCI가 Always Free A1 할당을 **2 OCPU / 12GB로 축소**했다. 단일 노드 채택이라는 본 결정의 본질(아래 근거 1~5)은 그대로 유효하지만, 자원 전제와 그 위 워크로드 배치는 **[ADR-0004](0004-refit-platform-for-12gb-free-tier.md)** 로 갱신되었다. 아래 본문의 24GB 수치는 작성 시점의 역사적 기록으로 둔다.
+
 ## 맥락
 
 개인 포트폴리오 겸 학습용으로 OCI Always Free Ampere A1 자원(총 4 OCPU / 24GB RAM, 최대 4 인스턴스까지 분할 가능)에 이 `platform-infra` GitOps 스택을 새로 구축한다.
@@ -72,7 +76,7 @@ k3s는 단일 서버에서 시작한 뒤 에이전트 노드를 명령 한 줄�
 
 - OCI 인스턴스를 4 OCPU / 24GB 단일 인스턴스로 재구성한다(콘솔 작업).
 - k3s를 단일 서버 노드로 설치하고, ArgoCD → Sealed Secrets → Root App 순으로 부트스트랩한다.
-- `README.md`와 `CLAUDE.md`의 클러스터 환경 표(이전 회사 환경 `210.113.225.245:22222` 기준)를 새 단일 노드 정보로 갱신한다.
+- `README.md`와 `CLAUDE.md`의 클러스터 환경 정보(이전 2-node 구성 기준)를 새 단일 노드 정보로 갱신한다.
 - 접근은 `docs/cluster-access-kubeconfig.md`의 방식 B(SSH 터널 + 로컬 kubeconfig)를 유지하되, 호스트/포트를 새 노드 값으로 갱신한다.
 
 ## 비목표
@@ -87,5 +91,5 @@ k3s는 단일 서버에서 시작한 뒤 에이전트 노드를 명령 한 줄�
 ## 미해결 질문
 
 - 단일 노드의 정기 백업/복구 주기는 `docs/platform-backup-restore-runbook.md` 정책으로 충분한가?
-- 무거운 스택을 단일 노드에서 안정 운영하려면 일부 컴포넌트(예: Trivy 스캔, retention)를 경량화해야 하는가?
+- ~~무거운 스택을 단일 노드에서 안정 운영하려면 일부 컴포넌트(예: Trivy 스캔, retention)를 경량화해야 하는가?~~ → [ADR-0004](0004-refit-platform-for-12gb-free-tier.md)에서 결정됨 (Trivy 비활성화, Prometheus retention 5d, 로그 스택 on-demand).
 - 향후 AI 시뮬레이터 플랫폼(ADR-0001) 도입 시 단일 노드 자원으로 MinIO/MLflow까지 수용 가능한가, 별도 노드/저장소가 필요한가?

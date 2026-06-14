@@ -8,7 +8,8 @@ metadata:
 spec:
   project: platform-infra
   sources:
-    - repoURL: https://charts.bitnami.com/bitnami
+    # charts.bitnami.com은 2025-08 Bitnami 카탈로그 개편 이후 폐쇄됨(403) — OCI 경로 사용
+    - repoURL: oci://registry-1.docker.io/bitnamicharts
       chart: keycloak
       targetRevision: "25.2.0"
       helm:
