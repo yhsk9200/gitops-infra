@@ -77,5 +77,5 @@ jobs:
           render platform-system-sealed-secrets sealed-secrets 2.18.4 helm-values/system/sealed-secrets-values.yaml -n platform-system --repo https://bitnami-labs.github.io/sealed-secrets
           render platform-registry-harbor harbor 1.16.2 helm-values/registry/harbor-values.yaml -n platform-registry --repo https://helm.goharbor.io
           render platform-monitoring-prometheus kube-prometheus-stack 83.6.0 helm-values/monitoring/kube-prometheus-stack-values.yaml -n platform-monitoring --repo https://prometheus-community.github.io/helm-charts
-          render platform-monitoring-loki loki 6.46.0 helm-values/monitoring/loki-values.yaml -n platform-monitoring --repo https://grafana-community.github.io/helm-charts
+          render platform-monitoring-loki loki 6.46.0 helm-values/monitoring/loki-values.yaml -n platform-monitoring --repo https://grafana.github.io/helm-charts
           render platform-monitoring-alloy alloy 1.7.0 helm-values/monitoring/alloy-values.yaml -n platform-monitoring --repo https://grafana.github.io/helm-charts

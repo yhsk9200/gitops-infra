@@ -45,7 +45,7 @@ OCI Always Free의 Arm Ampere A1 할당이 **4 OCPU / 24GB에서 2 OCPU / 12GB�
 
 ## 결과 / 영향
 
-- `apps/`(상시) = 11개, `apps-ondemand/` = 2개(loki, alloy)
+- `apps/`(상시) = Application 10개 + AppProject 1개, `apps-ondemand/` = 2개(loki, alloy)
 - sync wave: 상시 스택의 최대 wave는 5(PrometheusRule). Harbor는 wave 4
 - ADR-0002는 이 ADR로 자원 전제(4/24)가 갱신됨을 명시하도록 보강
 

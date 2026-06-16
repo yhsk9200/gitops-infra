@@ -204,7 +204,7 @@ kubeseal --fetch-cert \
 | Sealed Secrets | `bitnami-labs/sealed-secrets` | `2.18.4` |
 | cert-manager | `jetstack/cert-manager` | `v1.17.0` |
 | Prometheus Stack | `prometheus-community/kube-prometheus-stack` | `83.6.0` |
-| Loki | `grafana-community/loki` | `6.46.0` |
+| Loki | `grafana/loki` | `6.46.0` |
 | Alloy | `grafana/alloy` | `1.7.0` |
 | Harbor | `goharbor/harbor` | `1.16.2` |
 
