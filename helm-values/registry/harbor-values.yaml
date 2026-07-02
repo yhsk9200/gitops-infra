@@ -1,18 +1,22 @@
 # =============================================================================
 # Harbor Helm values for the dev k3s environment
 # =============================================================================
+# 호스트는 OCI 단일 노드 공인 IP(158.179.169.201) 기반 nip.io로 고정되어 있습니다.
+# 노드 IP가 바뀌면 이 파일과 운영 문서의 호스트를 함께 갱신합니다
+# (절차: docs/cluster-rebuild-runbook.md Phase 4).
+# =============================================================================
 
 expose:
   type: ingress
   ingress:
     className: traefik
     hosts:
-      core: harbor.210.113.225.245.nip.io
+      core: harbor.158.179.169.201.nip.io
   tls:
     enabled: false
 
 # External clients reach Harbor through the ingress on standard HTTP port 80.
-externalURL: http://harbor.210.113.225.245.nip.io
+externalURL: http://harbor.158.179.169.201.nip.io
 
 updateStrategy:
   type: Recreate
@@ -46,10 +50,8 @@ persistence:
       storageClass: local-path
       accessMode: ReadWriteOnce
       size: 5Gi
-    trivy:
-      storageClass: local-path
-      accessMode: ReadWriteOnce
-      size: 10Gi
+    # trivy PVC는 trivy.enabled: false(ADR-0004)로 생성되지 않음.
+    # 일시적으로 켜면 chart 기본 PVC가 local-path에 바인딩됩니다.
 
 database:
   type: external
@@ -61,20 +63,18 @@ database:
     existingSecret: harbor-db-secret
     sslmode: disable
 
+# internal Redis를 의도적으로 유지합니다 (ADR-0003).
+# 공용 Redis로의 전환을 검토했으나, harbor chart의 redis.external.existingSecret이
+# helm `lookup` 기반이라 ArgoCD(helm template 렌더링)에서 동작하지 않고,
+# 평문 password를 values에 넣는 대안은 SealedSecrets 원칙에 위배되어 기각했습니다.
 redis:
   type: internal
 
+# Trivy(이미지 취약점 스캐너)는 12GB 단일 노드에서 가장 큰 메모리 스파이크
+# 원인(DB 갱신 + 스캔 시 ~1Gi)이라 상시 비활성화합니다 (ADR-0004).
+# 스캔이 필요하면 일시적으로 enabled: true로 켰다가 끕니다(on-demand).
 trivy:
-  enabled: true
-  gitHubToken: ""
-  skipUpdate: false
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: 500m
-      memory: 1Gi
+  enabled: false
 
 metrics:
   enabled: true

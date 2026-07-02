@@ -2,6 +2,8 @@
 
 이 문서는 배포 또는 설정 변경 이후 플랫폼 모니터링 및 로깅 구성이 정상 동작하는지 확인하기 위한 점검표입니다.
 
+> **on-demand 주의 (ADR-0004)**: 메트릭(Prometheus/Grafana)은 상시 가동입니다. **로그 스택(Loki/Alloy)은 `apps-ondemand/`로 분리된 on-demand 컴포넌트**라 평소엔 미가동입니다. 아래 Loki/Alloy 관련 섹션(4·5·6 등)은 `kubectl apply -f apps-ondemand/`로 띄운 뒤에만 적용되며, 점검 후 `kubectl delete -f apps-ondemand/`로 내립니다.
+
 ## 점검 범위
 
 - Argo CD 애플리케이션 상태
@@ -193,12 +195,6 @@ curl "http://127.0.0.1:3100/loki/api/v1/label/app/values"
 
 ```logql
 {namespace="platform-db", pod=~".*postgres.*"}
-```
-
-- [ ] Redis 로그가 조회되는지 확인한다.
-
-```logql
-{namespace="platform-db", pod=~".*redis.*"}
 ```
 
 - [ ] Keycloak 로그가 조회되는지 확인한다.

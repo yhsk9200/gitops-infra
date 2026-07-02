@@ -1,0 +1,82 @@
+# =============================================================================
+# Platform v1 PrometheusRule
+# =============================================================================
+# 설계 원칙:
+# - 특정 릴리스/리소스 이름에 핀 고정하지 않고 kube-state-metrics 기반의
+#   제네릭 룰로 platform-* 네임스페이스 전체를 커버합니다.
+#   (PostgreSQLDown/KeycloakDown/LokiDown 등 개별 후보 룰은
+#    StatefulSetDegraded/DeploymentDegraded가 이름 독립적으로 포괄)
+# - Alertmanager receiver/route는 알림 채널 확정 후 별도 작업
+#   (docs/platform-alerting-todo.md 참조). 그 전까지는 Alertmanager UI에서
+#   firing 여부를 확인합니다.
+# - kube-prometheus-stack values에 ruleSelectorNilUsesHelmValues: false가
+#   설정되어 있어 라벨 매칭 없이도 Prometheus가 이 룰을 로딩합니다.
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: platform-rules
+  namespace: platform-monitoring
+  labels:
+    app.kubernetes.io/part-of: platform-infra
+spec:
+  groups:
+    - name: platform.availability
+      rules:
+        - alert: PlatformPodCrashLooping
+          expr: increase(kube_pod_container_status_restarts_total{namespace=~"platform-.*"}[15m]) > 3
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} 재시작 반복"
+            description: "컨테이너 {{ $labels.container }}가 최근 15분간 3회를 초과해 재시작했습니다."
+
+        - alert: PlatformPodNotReady
+          expr: sum by (namespace, pod) (kube_pod_status_phase{namespace=~"platform-.*", phase=~"Pending|Unknown|Failed"}) > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} 비정상 phase"
+            description: "Pod가 15분 이상 Pending/Unknown/Failed 상태입니다. 스케줄링 실패나 이미지 pull 실패 여부를 확인하세요."
+
+        - alert: PlatformDeploymentDegraded
+          expr: kube_deployment_status_replicas_available{namespace=~"platform-.*"} < kube_deployment_spec_replicas{namespace=~"platform-.*"}
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} 가용 replica 부족"
+            description: "10분 이상 available replica가 spec보다 적습니다. (Alloy, Harbor 구성요소, Grafana 등 포괄)"
+
+        - alert: PlatformStatefulSetDegraded
+          expr: kube_statefulset_status_replicas_ready{namespace=~"platform-.*"} < kube_statefulset_status_replicas{namespace=~"platform-.*"}
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "StatefulSet {{ $labels.namespace }}/{{ $labels.statefulset }} ready replica 부족"
+            description: "10분 이상 ready replica가 부족합니다. (PostgreSQL, Keycloak, Prometheus 등 포괄. Loki는 on-demand 기동 시)"
+
+    - name: platform.capacity
+      rules:
+        - alert: PlatformPVAlmostFull
+          expr: kubelet_volume_stats_available_bytes{namespace=~"platform-.*"} / kubelet_volume_stats_capacity_bytes{namespace=~"platform-.*"} < 0.10
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} 잔여 공간 10% 미만"
+            description: "단일 노드 local-path 환경이므로 노드 디스크 고갈로 직결됩니다. 보존 기간/이미지 정리를 검토하세요."
+
+    - name: platform.scrape
+      rules:
+        - alert: PlatformTargetDown
+          expr: up{namespace=~"platform-.*"} == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Scrape 대상 다운: {{ $labels.namespace }}/{{ $labels.job }}"
+            description: "Prometheus가 10분 이상 해당 타깃을 수집하지 못했습니다. (Harbor exporter, kube-state-metrics 등 포괄. Loki/Alloy는 on-demand 기동 시)"

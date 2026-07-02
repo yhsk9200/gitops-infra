@@ -7,6 +7,22 @@ global:
         userPasswordKey: "keycloak-password"
       database: "keycloak_db"
       username: "keycloak_admin"
+  security:
+    # bitnamilegacy 레포 이미지를 쓰기 위한 chart 검증 게이트 해제
+    allowInsecureImages: true
+# ---------------------------------------------------------------------------
+# 이미지 고정 (Bitnami 카탈로그 개편 대응)
+# ---------------------------------------------------------------------------
+# chart 18.5.19의 기본 이미지는 docker.io/bitnami/postgresql:latest로
+# 버전이 고정되지 않아 재구축 시마다 다른 PG 메이저가 뜰 수 있습니다.
+# bitnamilegacy의 마지막 고정 태그(PG 17.6)로 핀 고정합니다.
+# 주의: bitnami/postgresql:latest(PG 18.x)로 초기화된 기존 data 디렉토리에는
+#       이 이미지로 기동할 수 없음 — 빈 PVC에서 시작하는 clean install 전용.
+# ---------------------------------------------------------------------------
+image:
+  registry: docker.io
+  repository: bitnamilegacy/postgresql
+  tag: 17.6.0-debian-12-r4
 architecture: standalone
 primary:
   persistence:
@@ -53,4 +69,8 @@ primary:
       readOnly: true
 volumePermissions:
   enabled: true
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/os-shell
+    tag: 12-debian-12-r51
 

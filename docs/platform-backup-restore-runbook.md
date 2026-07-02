@@ -43,9 +43,9 @@
 | 1 | Harbor registry 파일 | `platform-registry` PVC | node local-path tar |
 | 1 | Sealed Secrets controller key | `platform-system` | Secret YAML 보안 보관 |
 | 1 | 백업 manifest/checksum | 백업 세트 | YAML, SHA256 |
-| 2 | GitOps 저장소 기준점 | GitLab | commit hash 기록 |
+| 2 | GitOps 저장소 기준점 | GitHub | commit hash 기록 |
 | 2 | Grafana/Loki 데이터 | `platform-monitoring` | 필요 시 별도 검토 |
-| 3 | Redis | `platform-db` | 현재는 캐시 성격, 필요 시 별도 검토 |
+| 3 | Harbor internal Redis | `platform-registry` | 캐시 성격, 백업 제외 (ADR-0003) |
 
 ## 3. 백업 기본 원칙
 
@@ -289,7 +289,7 @@ grep -n "sealed-secrets-key" "$BACKUP_ROOT/sealed-secrets/sealed-secrets-control
 cat > "$BACKUP_ROOT/manifest.yaml" <<EOF
 backup_id: "$BACKUP_DATE"
 created_at: "$(date -Iseconds)"
-cluster: "dgtp-platform"
+cluster: "platform-infra"
 mode: "local-backup-set-with-manual-nas-export"
 git_commit: "$(cat "$BACKUP_ROOT/gitops/platform-infra-commit.txt")"
 postgres:
@@ -383,7 +383,7 @@ NAS와 k3s 서버가 완전히 별도 망이므로, 현재 단계에서는 수�
 NAS 권장 경로:
 
 ```text
-/volume1/platform-backups/dgtp-platform/
+/volume1/platform-backups/platform-infra/
 ├── daily/
 ├── weekly/
 └── restore-tests/
@@ -520,9 +520,9 @@ http://127.0.0.1:8080
 ```bash
 kubectl get pods -n platform-registry -o wide
 kubectl get configmap platform-registry-harbor-core -n platform-registry -o yaml | grep EXT_ENDPOINT
-curl -I http://harbor.210.113.225.245.nip.io
-docker login harbor.210.113.225.245.nip.io
-docker pull harbor.210.113.225.245.nip.io/library/busybox:push-test
+curl -I http://harbor.158.179.169.201.nip.io
+docker login harbor.158.179.169.201.nip.io
+docker pull harbor.158.179.169.201.nip.io/library/busybox:push-test
 ```
 
 정상 기준:
@@ -548,14 +548,14 @@ docker pull harbor.210.113.225.245.nip.io/library/busybox:push-test
 
 - NAS와 k3s 서버가 완전히 별도 망입니다.
 - 초기 운영자가 이해하고 반복할 수 있는 절차가 더 중요합니다.
-- 지금 단계에서 과한 자동화는 버스팩터를 오히려 높일 수 있습니다.
+- 지금 단계에서 과한 자동화는 절차를 이해하지 못한 채 동작하는 블랙박스를 만들 수 있습니다.
 
 ## 20. 자동화 전환 TODO
 
 아래 조건이 충족되면 자동화를 검토합니다.
 
 - 백업 절차를 2회 이상 수동 성공
-- NAS 반출 절차와 담당자 확정
+- NAS 반출 절차 확정
 - 백업 파일 용량과 소요 시간 파악
 - 복구 리허설 1회 성공
 - 망간 전송 정책 확정
