@@ -193,13 +193,13 @@ kubeseal --fetch-cert \
 | --- | --- | --- |
 | PostgreSQL | `bitnamicharts/postgresql` (OCI) | `18.5.19` |
 | Keycloak | `bitnamicharts/keycloak` (OCI) | `25.2.0` |
-| Sealed Secrets | `bitnami-labs/sealed-secrets` | `2.18.4` |
+| Sealed Secrets | `bitnami/sealed-secrets` | `2.18.4` |
 | cert-manager | `jetstack/cert-manager` | `v1.17.0` |
 | Prometheus Stack | `prometheus-community/kube-prometheus-stack` | `83.6.0` |
 | Loki | `grafana/loki` | `6.46.0` |
 | Alloy | `grafana/alloy` | `1.7.0` |
 
-> Bitnami 차트(PostgreSQL/Keycloak)는 2025-08 카탈로그 개편으로 `charts.bitnami.com`이 폐쇄되어 `oci://registry-1.docker.io/bitnamicharts`에서 받습니다. 컨테이너 이미지는 버전 미고정(`latest`) 기본값 대신 `bitnamilegacy/*` 고정 태그로 핀 고정되어 있습니다 (PostgreSQL `17.6.0`, Keycloak `26.3.3`).
+> Bitnami 차트(PostgreSQL/Keycloak)는 2025-08 카탈로그 개편으로 `charts.bitnami.com`이 폐쇄되어 Docker Hub OCI 레지스트리(`registry-1.docker.io/bitnamicharts`)에서 받습니다 — Application `repoURL`은 스킴 없는 형식을 사용합니다(`oci://` 스킴은 ArgoCD 3.x에서 401 유발, `docs/cluster-rebuild-runbook.md` 3.2 참조). 컨테이너 이미지는 버전 미고정(`latest`) 기본값 대신 `bitnamilegacy/*` 고정 태그로 핀 고정되어 있습니다 (PostgreSQL `17.6.0`, Keycloak `26.3.3` — arm64 지원 확인됨).
 >
 > Loki/Alloy는 상시가 아닌 **on-demand**(`apps-ondemand/`)입니다 — 12GB 단일 노드 리핏 ([ADR-0004](docs/adr/0004-refit-platform-for-12gb-free-tier.md)).
 
@@ -234,12 +234,11 @@ kubeseal --fetch-cert \
 
 ## 10. 현재 상태와 로드맵
 
-**현재 상태**: 단일 노드 재구축 진행 중입니다. OCI 노드(공인 IP `158.179.169.201`)가 발급되어 호스트/주소는 실제 IP로 확정됐고(런북 Phase 4 완료), k3s 설치·부트스트랩(Phase 1~3)은 `docs/cluster-rebuild-runbook.md`를 따릅니다. Always Free 자원이 2 OCPU/12GB로 축소됨에 따라 스택을 lean 상시 + on-demand 구조로 리핏했습니다 ([ADR-0004](docs/adr/0004-refit-platform-for-12gb-free-tier.md)).
+**현재 상태**: 단일 노드 재구축 **완료** (2026-07-02, 런북 검증 체크리스트 통과). 노드 `158.179.169.201`(k3s v1.32.13, arm64)에서 전 애플리케이션 Synced/Healthy로 가동 중입니다. 설계는 Always Free worst-case(2 OCPU/12GB, [ADR-0004](docs/adr/0004-refit-platform-for-12gb-free-tier.md)) 기준의 lean 상시 + on-demand 구조를 유지합니다. 재구축 과정에서 발견된 아키텍처 제약으로 Harbor를 제거하고 레지스트리를 오프클러스터화했습니다 ([ADR-0006](docs/adr/0006-remove-harbor-registry-off-cluster.md)).
 
 로드맵 (우선순위 순):
 
-1. 클러스터 재구축 + 검증 체크리스트 통과 (런북 Phase 0~4)
-2. Alertmanager receiver 연결 (알림 채널 확정 후)
-3. 백업 절차 스크립트화 + 반출 리허설
-4. Keycloak 도메인/TLS 확정 → Grafana SSO 연동
-5. AI 모델 시뮬레이터 플랫폼 (MLflow + MinIO, 별도 레포 — ADR-0001)
+1. Alertmanager receiver 연결 (알림 채널 확정 후)
+2. 백업 런북 개정(Harbor 제거 반영) + 절차 스크립트화 + 반출 리허설
+3. 도메인/TLS 확정(DuckDNS + cert-manager) → Keycloak → Grafana SSO 연동
+4. AI 모델 시뮬레이터 플랫폼 (MLflow + MinIO, 별도 레포 — ADR-0001)
