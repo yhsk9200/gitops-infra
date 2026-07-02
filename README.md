@@ -2,7 +2,7 @@
 
 [![validate](https://github.com/yhsk9200/gitops-infra/actions/workflows/validate.yaml/badge.svg)](https://github.com/yhsk9200/gitops-infra/actions/workflows/validate.yaml)
 
-OCI Always Free 단일 노드(Ampere A1, 2 OCPU / 12GB) k3s 위에 플랫폼 공용 인프라 — IAM(Keycloak), 컨테이너 레지스트리(Harbor), 관측성(Prometheus/Grafana, 로그 Loki/Alloy는 on-demand), 데이터베이스(PostgreSQL), 시크릿(Sealed Secrets) — 를 **ArgoCD App of Apps 패턴**으로 선언적으로 배포·운영하는 개인 GitOps 레포입니다.
+OCI Always Free 단일 노드(Ampere A1, 2 OCPU / 12GB) k3s 위에 플랫폼 공용 인프라 — IAM(Keycloak), 관측성(Prometheus/Grafana, 로그 Loki/Alloy는 on-demand), 데이터베이스(PostgreSQL), 시크릿(Sealed Secrets) — 를 **ArgoCD App of Apps 패턴**으로 선언적으로 배포·운영하는 개인 GitOps 레포입니다.
 
 목표는 "많은 컴포넌트를 띄우는 것"이 아니라, **제약(무료 티어, 단일 노드, 단독 운영) 아래에서 무엇을 채택하고 무엇을 버렸는지**를 코드와 문서로 남기는 것입니다.
 
@@ -21,11 +21,12 @@ OCI Always Free 단일 노드(Ampere A1, 2 OCPU / 12GB) k3s 위에 플랫폼 공
 | **단일 노드 토폴로지** | 2노드는 etcd 쿼럼이 없어 HA가 아니고, local-path PV는 노드에 고정되어 stateful 복원력이 0 — 분절된 노드보다 통합된 단일 노드가 낫다 | [ADR-0002](docs/adr/0002-single-node-cluster-topology.md) |
 | **12GB 리핏 (free-tier 반감 대응)** | Always Free가 4 OCPU/24GB→2 OCPU/12GB로 축소 — capability를 영구 삭제하지 않고 lean 상시(메트릭)+on-demand(로그/Trivy)로 right-sizing | [ADR-0004](docs/adr/0004-refit-platform-for-12gb-free-tier.md) |
 | **공용 Redis 제거** | 유일한 후보 소비자(Harbor)가 chart의 `lookup` 기반 `existingSecret` 제약으로 ArgoCD 렌더링과 비호환 — 빈 공용 컴포넌트를 유지하는 대신 제거 | [ADR-0003](docs/adr/0003-remove-shared-redis.md) |
+| **Harbor 제거 — 레지스트리 오프클러스터화** | 공식 이미지가 amd64 전용이라 Ampere(arm64) 노드에서 기동 불가 + 실수요(GHCR로 충분) 대비 최중량 컴포넌트 — 유지 대신 제거, self-hosted 필요 시 arm64 네이티브(zot) on-demand 재검토 | [ADR-0006](docs/adr/0006-remove-harbor-registry-off-cluster.md) |
 | **AI 시뮬레이터 플랫폼 방향** | MLflow + MinIO 조합, 이 레포가 아닌 별도 GitOps 단위로 분리 — Kubeflow는 요구가 명확해질 때까지 보류 | [ADR-0001](docs/adr/0001-ai-model-simulator-platform.md) |
 
 ADR 외에 values 주석으로 남긴 결정들:
 
-- **Trivy 비활성화 + Prometheus 경량화(retention 5d/limit 1Gi)** — 12GB 리핏의 메모리 우선순위화 (`helm-values/registry/harbor-values.yaml`, `helm-values/monitoring/kube-prometheus-stack-values.yaml`, [ADR-0004](docs/adr/0004-refit-platform-for-12gb-free-tier.md))
+- **Prometheus 경량화(retention 5d/limit 1Gi)** — 12GB 리핏의 메모리 우선순위화 (`helm-values/monitoring/kube-prometheus-stack-values.yaml`, [ADR-0004](docs/adr/0004-refit-platform-for-12gb-free-tier.md))
 - **Alloy를 DaemonSet이 아닌 단일 Deployment**로 운영 — hostPath/privileged 회피의 대가로 복원력 일부 양보 (`helm-values/monitoring/alloy-values.yaml`)
 - **Loki single-binary + 캐시/카나리 제거** — 단일 노드 자원에 맞춘 최소 구성. 로그 스택은 on-demand(`apps-ondemand/`) (`helm-values/monitoring/loki-values.yaml`)
 - **백업은 수동 반출** — 자동화 전에 절차 이해와 리허설 우선 (`docs/platform-backup-restore-runbook.md`)
@@ -59,10 +60,9 @@ flowchart LR
       KC["Keycloak"]
     end
 
-    subgraph obs["wave 3~5 · 관측성/레지스트리 (상시)"]
+    subgraph obs["wave 3~5 · 관측성 (상시)"]
       direction LR
       PROM["Prometheus<br/>Grafana"]
-      HARBOR["Harbor"]
       RULES["PrometheusRule"]
     end
 
@@ -77,7 +77,6 @@ flowchart LR
   ARGO -- "sync (wave 순서)" --> base --> data --> obs
   ARGO -. "kubectl apply (필요 시)" .-> ond
   KC -- "keycloak_db" --> PG
-  HARBOR -- "harbor_registry" --> PG
   ALLOY -. "pod 로그/이벤트" .-> LOKI
   PROM -. "Explore 데이터소스" .-> LOKI
 ```
@@ -98,8 +97,7 @@ platform-root-infra
     ├── platform-db-postgres
     ├── platform-iam-keycloak
     ├── platform-monitoring-prometheus
-    ├── platform-monitoring-rules
-    └── platform-registry-harbor
+    └── platform-monitoring-rules
 
 apps-ondemand/                     ← root 스캔 제외, 필요 시 kubectl apply (ADR-0004)
     ├── platform-monitoring-loki
@@ -118,7 +116,6 @@ apps-ondemand/                     ← root 스캔 제외, 필요 시 kubectl ap
 | `1` | `platform-db-postgres` | 공용 데이터베이스 |
 | `2` | `platform-iam-keycloak` | 인증/인가 |
 | `3` | `platform-monitoring-prometheus` | Prometheus, Grafana, Alertmanager |
-| `4` | `platform-registry-harbor` | 이미지 레지스트리 |
 | `5` | `platform-monitoring-rules` | 알림 룰 |
 
 > 로그 스택(`platform-monitoring-loki`, `platform-monitoring-alloy`)은 `apps-ondemand/`로 분리된 **on-demand** 컴포넌트입니다. root가 자동 배포하지 않으며, 필요할 때 `kubectl apply -f apps-ondemand/`로 띄웁니다 ([ADR-0004](docs/adr/0004-refit-platform-for-12gb-free-tier.md)).
@@ -131,7 +128,6 @@ apps-ondemand/                     ← root 스캔 제외, 필요 시 kubectl ap
 | `platform-db` | PostgreSQL |
 | `platform-iam` | Keycloak |
 | `platform-monitoring` | Prometheus, Grafana (Loki/Alloy는 on-demand) |
-| `platform-registry` | Harbor (Trivy는 on-demand) |
 | `cert-manager` | cert-manager controller |
 
 ## 5. 디렉토리 구조
@@ -153,10 +149,9 @@ gitops-infra/
 │   ├── database/
 │   ├── iam/
 │   ├── monitoring/
-│   ├── registry/
 │   └── system/
 └── docs/
-    ├── adr/                   ← 의사결정 기록 (0001~0004)
+    ├── adr/                   ← 의사결정 기록 (0001~0006)
     ├── cluster-rebuild-runbook.md
     ├── platform-backup-restore-runbook.md
     └── ...
@@ -187,13 +182,10 @@ kubeseal --fetch-cert \
 
 | Secret | Namespace | 주요 key | 비고 |
 | --- | --- | --- | --- |
-| `postgres-db-secret` | `platform-db` | `postgres-password`, `keycloak-password`, `harbor-password` | PostgreSQL superuser와 앱 DB 계정 |
+| `postgres-db-secret` | `platform-db` | `postgres-password`, `keycloak-password` | PostgreSQL superuser와 앱 DB 계정 |
 | `keycloak-admin-secret` | `platform-iam` | `admin-password` | Keycloak 관리자 |
 | `keycloak-db-secret` | `platform-iam` | `keycloak-password` | `postgres-db-secret`의 `keycloak-password`와 동일 값 |
 | `grafana-admin-secret` | `platform-monitoring` | `admin-user`, `admin-password` | Grafana 관리자 |
-| `harbor-admin-secret` | `platform-registry` | `admin-password` | Harbor 관리자 |
-| `harbor-core-secret` | `platform-registry` | `secretKey` | Harbor core secret key (16자) |
-| `harbor-db-secret` | `platform-registry` | `password` | `postgres-db-secret`의 `harbor-password`와 동일 값 |
 
 ## 8. 컴포넌트
 
@@ -206,11 +198,10 @@ kubeseal --fetch-cert \
 | Prometheus Stack | `prometheus-community/kube-prometheus-stack` | `83.6.0` |
 | Loki | `grafana/loki` | `6.46.0` |
 | Alloy | `grafana/alloy` | `1.7.0` |
-| Harbor | `goharbor/harbor` | `1.16.2` |
 
 > Bitnami 차트(PostgreSQL/Keycloak)는 2025-08 카탈로그 개편으로 `charts.bitnami.com`이 폐쇄되어 `oci://registry-1.docker.io/bitnamicharts`에서 받습니다. 컨테이너 이미지는 버전 미고정(`latest`) 기본값 대신 `bitnamilegacy/*` 고정 태그로 핀 고정되어 있습니다 (PostgreSQL `17.6.0`, Keycloak `26.3.3`).
 >
-> Loki/Alloy는 상시가 아닌 **on-demand**(`apps-ondemand/`), Harbor의 **Trivy는 비활성화** 상태입니다 — 12GB 단일 노드 리핏 ([ADR-0004](docs/adr/0004-refit-platform-for-12gb-free-tier.md)).
+> Loki/Alloy는 상시가 아닌 **on-demand**(`apps-ondemand/`)입니다 — 12GB 단일 노드 리핏 ([ADR-0004](docs/adr/0004-refit-platform-for-12gb-free-tier.md)).
 
 ## 9. 운영 메모
 
@@ -224,19 +215,9 @@ kubeseal --fetch-cert \
 - `docs/keycloak-rbac-plan.md`
 - `docs/keycloak-manual-rbac-checklist.md`
 
-### Harbor
+### 컨테이너 레지스트리
 
-Harbor는 `platform-db-postgres`의 external PostgreSQL을 사용합니다 (`harbor_admin` / `harbor_registry`는 PostgreSQL initdb 스크립트가 자동 생성). Redis는 의도적으로 chart internal을 유지합니다 — 근거는 [ADR-0003](docs/adr/0003-remove-shared-redis.md).
-
-외부 접속 주소 (OCI 단일 노드 공인 IP `158.179.169.201` 기반 nip.io. 노드 IP 변경 시 `helm-values/registry/harbor-values.yaml`과 함께 갱신 — `docs/cluster-rebuild-runbook.md` Phase 4):
-
-```text
-http://harbor.158.179.169.201.nip.io
-```
-
-HTTP 레지스트리이므로 외부 Docker 클라이언트에서는 위 주소를 insecure registry로 허용해야 합니다. Push/pull 검증은 `docs/harbor-push-pull-checklist.md`를 따릅니다.
-
-Harbor는 chart 특성상 `Healthy + OutOfSync`로 남을 수 있습니다. Harbor UI 접속, pod readiness, push/pull, external PostgreSQL 연결이 정상이라면 known diff로 간주합니다.
+클러스터 내 레지스트리(Harbor)는 운영하지 않습니다 — 공식 이미지가 amd64 전용이라 Ampere(arm64) 노드에서 기동 불가했고, 실수요 대비 최중량 컴포넌트였습니다. 이미지 저장은 **GHCR**(GitHub = source-of-truth 원칙과 일관)을 사용하고, self-hosted 레지스트리가 실제로 필요해지면 arm64 네이티브 경량 대안(zot)을 `apps-ondemand/`로 재검토합니다. 근거와 경위는 [ADR-0006](docs/adr/0006-remove-harbor-registry-off-cluster.md).
 
 ### Observability / Alerting
 
@@ -259,7 +240,6 @@ Harbor는 chart 특성상 `Healthy + OutOfSync`로 남을 수 있습니다. Harb
 
 1. 클러스터 재구축 + 검증 체크리스트 통과 (런북 Phase 0~4)
 2. Alertmanager receiver 연결 (알림 채널 확정 후)
-3. Harbor 외부 push/pull 최종 검증
-4. 백업 절차 스크립트화 + 반출 리허설
-5. Keycloak 도메인/TLS 확정 → Harbor/Grafana SSO 연동
-6. AI 모델 시뮬레이터 플랫폼 (MLflow + MinIO, 별도 레포 — ADR-0001)
+3. 백업 절차 스크립트화 + 반출 리허설
+4. Keycloak 도메인/TLS 확정 → Grafana SSO 연동
+5. AI 모델 시뮬레이터 플랫폼 (MLflow + MinIO, 별도 레포 — ADR-0001)

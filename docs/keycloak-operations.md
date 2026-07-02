@@ -127,7 +127,7 @@ WHERE d.datname = 'keycloak_db';
 - `proxyHeaders: xforwarded`
 - `hostnameStrict: true`
 - OIDC client redirect URI
-- Harbor / Grafana / API Gateway와의 SSO 연동
+- Grafana / API Gateway와의 SSO 연동
 
 ## 장애별 빠른 점검
 

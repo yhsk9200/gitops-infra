@@ -203,24 +203,7 @@ curl "http://127.0.0.1:3100/loki/api/v1/label/app/values"
 {namespace="platform-iam", pod=~".*keycloak.*"}
 ```
 
-- [ ] Harbor 로그가 조회되는지 확인한다.
-
-```logql
-{namespace="platform-registry", pod=~".*harbor.*"}
-```
-
-## 12. Harbor 참고 사항
-
-`platform-registry-harbor`는 Harbor chart 특성상 Argo CD에서 `Healthy + OutOfSync`로 남을 수 있습니다. 이 상태만으로 서비스 장애로 판단하지 않습니다.
-
-Harbor 정상 여부는 아래 항목으로 별도 확인합니다.
-
-- Harbor UI 로그인 가능 여부
-- 프로젝트 목록 조회 가능 여부
-- 이미지 push / pull 가능 여부
-- `platform-registry` 네임스페이스 내 Harbor 관련 파드 준비 상태
-
-## 13. 최종 점검 완료 여부
+## 12. 최종 점검 완료 여부
 
 - [ ] Argo CD 애플리케이션이 정상 상태다.
 - [ ] Loki가 로그를 정상 수신한다.
