@@ -74,7 +74,7 @@ jobs:
           render platform-db-postgres oci://registry-1.docker.io/bitnamicharts/postgresql 18.5.19 helm-values/database/postgres-values.yaml -n platform-db
           render platform-iam-keycloak oci://registry-1.docker.io/bitnamicharts/keycloak 25.2.0 helm-values/iam/keycloak-values-dev.yaml -n platform-iam
           render platform-iam-keycloak-prod oci://registry-1.docker.io/bitnamicharts/keycloak 25.2.0 helm-values/iam/keycloak-values-prod.yaml -n platform-iam
-          render platform-system-sealed-secrets sealed-secrets 2.18.4 helm-values/system/sealed-secrets-values.yaml -n platform-system --repo https://bitnami-labs.github.io/sealed-secrets
+          render platform-system-sealed-secrets sealed-secrets 2.18.4 helm-values/system/sealed-secrets-values.yaml -n platform-system --repo https://bitnami.github.io/sealed-secrets
           render platform-registry-harbor harbor 1.16.2 helm-values/registry/harbor-values.yaml -n platform-registry --repo https://helm.goharbor.io
           render platform-monitoring-prometheus kube-prometheus-stack 83.6.0 helm-values/monitoring/kube-prometheus-stack-values.yaml -n platform-monitoring --repo https://prometheus-community.github.io/helm-charts
           render platform-monitoring-loki loki 6.46.0 helm-values/monitoring/loki-values.yaml -n platform-monitoring --repo https://grafana.github.io/helm-charts
