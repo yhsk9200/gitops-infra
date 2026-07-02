@@ -7,3 +7,4 @@ CLAUDE.local.md
 *.tfstate
 *.tfstate.*
 .terraform/
+pub-cert.pem

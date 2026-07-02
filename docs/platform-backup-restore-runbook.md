@@ -2,6 +2,8 @@
 
 이 문서는 현재 단일 k3s 클러스터와 망분리 NAS 조건에서 현실적으로 운영 가능한 백업/복구 기준을 정리합니다.
 
+> **⚠️ 개정 필요 (2026-07-02)**: Harbor가 [ADR-0006](adr/0006-remove-harbor-registry-off-cluster.md)으로 제거되어, 본 문서의 Harbor 관련 절차(§7.3 Harbor DB 백업, §8 registry 파일 백업, §16.2/§17 Harbor 복구, §18.3 Harbor 검증 등)는 **무효**입니다. 유효한 백업 대상은 PostgreSQL(`keycloak_db`), SealedSecret 원본(git), sealed-secrets 컨트롤러 키입니다. 작업 3(백업 스크립트화) 때 전면 개정합니다.
+
 현재 단계에서는 NAS와 k3s 서버가 완전히 별도 망에 있으므로 NAS 자동 반출, NFS mount, 백업 전용 gateway, Kubernetes `CronJob` 기반 원격 백업은 바로 도입하지 않습니다.
 
 1차 정책은 아래처럼 정의합니다.

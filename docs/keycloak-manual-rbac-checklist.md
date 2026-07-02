@@ -2,7 +2,7 @@
 
 이 문서는 도메인이 아직 없는 현재 단계에서 Keycloak 관리자 콘솔로 수동 생성할 수 있는 최소 RBAC 기준을 정리합니다.
 
-목표는 SSO 최종 연동이 아니라, 나중에 Harbor/Grafana/API 연동을 붙일 때 재사용할 수 있는 realm, role, group, test user의 기준점을 만드는 것입니다.
+목표는 SSO 최종 연동이 아니라, 나중에 Grafana/API 연동을 붙일 때 재사용할 수 있는 realm, role, group, test user의 기준점을 만드는 것입니다.
 
 ## 전제 조건
 
@@ -113,7 +113,7 @@ http://127.0.0.1:8080
 
 ## 5. Client 생성은 보류
 
-도메인이 확정되기 전에는 Harbor/Grafana용 client 생성을 보류한다.
+도메인이 확정되기 전에는 Grafana용 client 생성을 보류한다.
 
 이유:
 
@@ -125,7 +125,6 @@ http://127.0.0.1:8080
 
 | Client ID | 대상 서비스 |
 | --- | --- |
-| `harbor` | Harbor OIDC |
 | `grafana` | Grafana OAuth |
 | `platform-api` | 향후 API Gateway |
 | `platform-console` | 향후 운영 콘솔 |

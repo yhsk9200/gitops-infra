@@ -20,7 +20,6 @@
 
 | Client ID | 용도 | 현재 단계 |
 | --- | --- | --- |
-| `harbor` | Harbor SSO 연동 | 도메인 확정 후 설정 |
 | `grafana` | Grafana SSO 연동 | 도메인 확정 후 설정 |
 | `platform-api` | 향후 API Gateway 또는 백엔드 API | 설계만 보류 |
 | `platform-console` | 향후 운영 콘솔 UI | 설계만 보류 |
@@ -46,7 +45,6 @@
 
 | 서비스 | 필요한 Role | 비고 |
 | --- | --- | --- |
-| Harbor | `platform-admin`, `platform-operator`, `platform-viewer` | Harbor OIDC group/role mapping 검토 필요 |
 | Grafana | `platform-admin`, `platform-operator`, `platform-viewer` | Grafana role mapping 검토 필요 |
 | API Gateway | `platform-admin`, `platform-operator`, `platform-viewer` | 실제 API 권한 모델 확정 후 설계 |
 

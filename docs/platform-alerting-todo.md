@@ -45,10 +45,10 @@ Grafana Alerting은 로그 기반 탐지나 Grafana UI 중심 운영이 필요�
 | --- | --- |
 | `PlatformPodCrashLooping` | 모든 platform-* pod 재시작 반복 |
 | `PlatformPodNotReady` | Pending/Unknown/Failed 정체 |
-| `PlatformDeploymentDegraded` | Alloy, Harbor 구성요소, Grafana 등 Deployment 계열 다운 |
+| `PlatformDeploymentDegraded` | Alloy, Grafana 등 Deployment 계열 다운 |
 | `PlatformStatefulSetDegraded` | PostgreSQL, Keycloak, Loki, Prometheus 등 StatefulSet 계열 다운 |
 | `PlatformPVAlmostFull` | PVC 잔여 10% 미만 (단일 노드 디스크 직결) |
-| `PlatformTargetDown` | Harbor exporter, kube-state-metrics 등 scrape 대상 다운 |
+| `PlatformTargetDown` | kube-state-metrics 등 scrape 대상 다운 |
 
 > Loki/Alloy는 on-demand(`apps-ondemand/`, ADR-0004)라 평소엔 scrape 대상이 아닙니다. on-demand로 띄운 동안에만 위 룰의 포괄 범위에 들어옵니다.
 

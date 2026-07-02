@@ -6,19 +6,18 @@
 
 ## 플레이스홀더
 
-아래 명령 예시는 절차 템플릿이라 `<NODE_IP>`/`<NODE_NIP>` 표기를 유지한다. 현재 클러스터의 확정값은 표에 함께 기재한다.
+아래 명령 예시는 절차 템플릿이라 `<NODE_IP>` 표기를 유지한다. 현재 클러스터의 확정값은 표에 함께 기재한다.
 
 | 표기 | 의미 | 현재 클러스터 값 |
 |---|---|---|
 | `<NODE_IP>` | 새 OCI 단일 노드 공인 IP | `158.179.169.201` |
-| `<NODE_NIP>` | `harbor.<NODE_IP>.nip.io` 형태의 Harbor 외부 호스트 | `harbor.158.179.169.201.nip.io` |
 
 ---
 
 ## Phase 0 — OCI 노드 준비 (콘솔, 수동) — ✅ 완료
 
 - 기존 2 인스턴스 정리 → **2 OCPU / 12GB 단일 인스턴스** 재구성 (Always Free 축소 반영, ADR-0004. grandfather로 4/24가 잡히면 `nproc; free -h`로 확인 후 ADR-0004 재검토 조건 참조)
-- 부트 볼륨 용량 확인 (local-path PV가 노드 디스크를 사용. Harbor registry PVC가 500Gi 요청이지만 local-path는 용량을 강제하지 않아 bind는 됨 — 실제 사용량이 디스크를 넘지 않도록 주의)
+- 부트 볼륨 용량 확인 (local-path PV가 노드 디스크를 사용 — 실제 사용량이 디스크를 넘지 않도록 주의)
 - 산출물: `<NODE_IP>` = `158.179.169.201` (발급 완료), SSH 접속 확인 (포트 22, `~/.ssh/id_rsa`)
 
 ---
@@ -38,7 +37,7 @@ echo -e "fs.inotify.max_user_instances=512\nfs.inotify.max_user_watches=524288" 
 
 방화벽 메모:
 - **지금 단계**: SSH 22만 외부 개방. k3s API 6443은 노드 로컬 유지(접근은 `docs/cluster-access-kubeconfig.md` 방식 B = SSH 터널).
-- **Harbor/Grafana 노출 시**: OCI Security List에 80/443 인바운드 추가 + Ubuntu 이미지 기본 iptables `REJECT` 룰 손봐야 Traefik 트래픽이 들어옴. (단일 노드라 노드 간 트래픽 이슈는 없음)
+- **Grafana 등 노출 시**: OCI Security List에 80/443 인바운드 추가 + Ubuntu 이미지 기본 iptables `REJECT` 룰 손봐야 Traefik 트래픽이 들어옴. (단일 노드라 노드 간 트래픽 이슈는 없음)
 
 ---
 
@@ -50,7 +49,7 @@ curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.32.x+k3s1" sh -
 ```
 
 - **내장 컴포넌트 유지**: Traefik(ingress) + ServiceLB(klipper) + local-path-provisioner
-  - 근거: `helm-values/registry/harbor-values.yaml`이 `className: traefik`, `storageClass: local-path` 전제. 별도 ingress 컨트롤러 없음.
+  - 근거: 별도 ingress 컨트롤러 없이 k3s 내장 Traefik 전제(향후 Grafana/Keycloak 노출도 동일), 전 컴포넌트 PVC는 `storageClass: local-path` 전제.
 - 검증(운영 PC에서, SSH 터널 기동 후):
 
 ```bash
@@ -78,7 +77,7 @@ kubectl get nodes   # 노드 1개 Ready
 확인 사항:
 - GitHub 레포가 **public이면** ArgoCD 익명 clone 가능. **private이면** ArgoCD에 repo credential(PAT) 등록 필요.
 - 모든 앱 `targetRevision: main` → GitHub 기본 브랜치 `main`과 일치.
-- `oci://` 스킴 repoURL은 ArgoCD 3.x 기준 — 3.2의 stable 매니페스트 설치면 충족.
+- 차트 repoURL은 스킴 없는 `registry-1.docker.io/bitnamicharts` + `chart:` 필드 형식 — `oci://` 스킴은 ArgoCD 3.x에서 401을 유발한다(3.2의 주의 참조, 2026-07 수정).
 
 ### 3.2 ArgoCD 설치
 
@@ -115,33 +114,26 @@ kubeseal --fetch-cert \
 gen() { tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "${1:-32}"; echo; }
 POSTGRES_PW=$(gen 32)
 KEYCLOAK_PW=$(gen 32)      # postgres-db-secret + keycloak-db-secret 공유
-HARBOR_DB_PW=$(gen 32)     # postgres-db-secret(harbor-password) + harbor-db-secret(password) 공유
 KEYCLOAK_ADMIN_PW=$(gen 32)
 GRAFANA_PW=$(gen 32)
-HARBOR_ADMIN_PW=$(gen 32)
-HARBOR_CORE_KEY=$(openssl rand -hex 8)   # 반드시 16자
 ```
 
 **시크릿 ↔ 파일 ↔ 키 매핑** (★ = 값 공유):
 
 | 파일 | Secret / NS | 키 |
 |---|---|---|
-| `postgres-sealed-secret.yaml` | `postgres-db-secret` / platform-db | `postgres-password`, ★`keycloak-password`, ★`harbor-password` |
+| `postgres-sealed-secret.yaml` | `postgres-db-secret` / platform-db | `postgres-password`, ★`keycloak-password` |
 | `keycloak-db-sealed-secret.yaml` | `keycloak-db-secret` / platform-iam | ★`keycloak-password` (= 위 keycloak-password) |
 | `keycloak-sealed-secret.yaml` | `keycloak-admin-secret` / platform-iam | `admin-password` |
 | `grafana-sealed-secret.yaml` | `grafana-admin-secret` / platform-monitoring | `admin-user`(=admin), `admin-password` |
-| `harbor-sealed-secret.yaml` | `harbor-admin-secret` / platform-registry | `admin-password` |
-| `harbor-sealed-secret.yaml` | `harbor-core-secret` / platform-registry | `secretKey` (16자) |
-| `harbor-sealed-secret.yaml` | `harbor-db-secret` / platform-registry | ★`password` (= 위 harbor-password) |
 
 **reseal 명령** (각 파일 헤더 주석과 동일 패턴, `--cert pub-cert.pem`):
 
 ```bash
-# postgres-db-secret (3키)
+# postgres-db-secret (2키)
 kubectl create secret generic postgres-db-secret --namespace=platform-db \
   --from-literal=postgres-password="$POSTGRES_PW" \
   --from-literal=keycloak-password="$KEYCLOAK_PW" \
-  --from-literal=harbor-password="$HARBOR_DB_PW" \
   --dry-run=client -o yaml | kubeseal --cert pub-cert.pem --format=yaml \
   > manifests/security/postgres-sealed-secret.yaml
 
@@ -163,23 +155,9 @@ kubectl create secret generic grafana-admin-secret --namespace=platform-monitori
   --from-literal=admin-password="$GRAFANA_PW" \
   --dry-run=client -o yaml | kubeseal --cert pub-cert.pem --format=yaml \
   > manifests/security/grafana-sealed-secret.yaml
-
-# harbor 3종 (admin → 파일 새로 쓰고, core/db는 append)
-kubectl create secret generic harbor-admin-secret --namespace=platform-registry \
-  --from-literal=admin-password="$HARBOR_ADMIN_PW" \
-  --dry-run=client -o yaml | kubeseal --cert pub-cert.pem --format=yaml \
-  > manifests/security/harbor-sealed-secret.yaml
-kubectl create secret generic harbor-core-secret --namespace=platform-registry \
-  --from-literal=secretKey="$HARBOR_CORE_KEY" \
-  --dry-run=client -o yaml | kubeseal --cert pub-cert.pem --format=yaml \
-  >> manifests/security/harbor-sealed-secret.yaml
-kubectl create secret generic harbor-db-secret --namespace=platform-registry \
-  --from-literal=password="$HARBOR_DB_PW" \
-  --dry-run=client -o yaml | kubeseal --cert pub-cert.pem --format=yaml \
-  >> manifests/security/harbor-sealed-secret.yaml
 ```
 
-> 생성한 평문 비밀번호는 안전한 비밀번호 관리자에 1회 보관(특히 grafana/harbor/keycloak admin, postgres superuser). 이후 셸 변수는 정리.
+> 생성한 평문 비밀번호는 안전한 비밀번호 관리자에 1회 보관(특히 grafana/keycloak admin, postgres superuser). 이후 셸 변수는 정리.
 
 reseal 결과를 **commit & push (GitHub)** 한다 → ArgoCD가 wave -1 재sync.
 
@@ -192,7 +170,7 @@ kubectl -n argocd get applications -w
 ```
 
 - 3.4의 reseal/push가 끝나야 wave -1(SealedSecret)이 정상 sync → wave 0~5 진행.
-- Postgres가 **새 비밀번호로 initdb** 하며 `harbor_admin`/`harbor_registry`, keycloak 계정을 생성(최초 빈 PVC 기준).
+- Postgres가 **새 비밀번호로 initdb** 하며 keycloak 계정을 생성(최초 빈 PVC 기준).
 
 ---
 
@@ -201,31 +179,27 @@ kubectl -n argocd get applications -w
 노드 IP가 `158.179.169.201`로 확정되어, 동작에 영향을 주는 config와 운영 문서·README의 호스트/주소를 실제 IP로 치환했다. 본 런북은 재사용 가능한 절차 템플릿이므로 명령 예시에는 `<NODE_IP>` 표기를 그대로 둔다(상단 플레이스홀더 표에 확정값 기재).
 
 ### config (동작 영향) — 치환 완료
-- `helm-values/registry/harbor-values.yaml`
-  - `expose.ingress.hosts.core: harbor.158.179.169.201.nip.io`
-  - `externalURL: http://harbor.158.179.169.201.nip.io`
+- ~~`helm-values/registry/harbor-values.yaml`~~ — 당시 치환 완료했으나 Harbor는 이후 [ADR-0006](adr/0006-remove-harbor-registry-off-cluster.md)으로 제거됨
 
 ### 문서 — 치환 완료
 
-README, `docs/cluster-access-kubeconfig.md`, `docs/harbor-push-pull-checklist.md`, `docs/platform-backup-restore-runbook.md`의 호스트/주소를 실제 IP로 치환하고 CLAUDE.md 상태도 갱신했다.
+README, `docs/cluster-access-kubeconfig.md`, `docs/platform-backup-restore-runbook.md`의 호스트/주소를 실제 IP로 치환하고 CLAUDE.md 상태도 갱신했다. (`docs/harbor-push-pull-checklist.md`는 Harbor와 함께 제거됨)
 
-> 향후 노드 IP가 다시 바뀌면 config(harbor-values)와 위 운영 문서의 호스트를 새 IP로 갱신한다 (`grep -rln '158.179.169.201'`로 범위 확인 후 sed).
+> 향후 노드 IP가 다시 바뀌면 위 운영 문서의 호스트를 새 IP로 갱신한다 (`grep -rln '158.179.169.201'`로 범위 확인 후 sed).
 
 ---
 
 ## 검증 체크리스트
 
 - [ ] `kubectl get nodes` → 1 Ready
-- [ ] `kubectl -n argocd get applications` → 전부 Synced/Healthy (Harbor는 `Healthy+OutOfSync` known diff 허용)
+- [ ] `kubectl -n argocd get applications` → 전부 Synced/Healthy
 - [ ] Postgres/Keycloak Pod Ready, Keycloak 콘솔 port-forward 접속
-- [ ] Harbor가 external PostgreSQL(platform-db)에 연결 (core pod 로그에 DB 오류 없음)
 - [ ] Grafana 접속(새 admin 비번), 메트릭 대시보드 표시
+- [ ] Prometheus 타깃 전부 up (kube-state-metrics 등)
 - [ ] (선택, on-demand) `kubectl apply -f apps-ondemand/` 후 Grafana Explore에서 Loki 로그 조회 → 확인 후 `kubectl delete -f apps-ondemand/`
-- [ ] Harbor UI 접속(`http://<NODE_NIP>`), 외부 push/pull (`docs/harbor-push-pull-checklist.md`)
-- [ ] Prometheus가 Harbor ServiceMonitor 수집
 
 ## 리스크 / 주의
 
-- **단일 노드 자원(12GB)**: ADR-0004로 이미 리핏됨 — Trivy off, Prometheus retention 5d·limit 1Gi, 로그(Loki/Alloy)는 `apps-ondemand/` on-demand. 상시 추정 ~6Gi. 추가 압박 시 keycloak/harbor requests 추가 조정 검토. on-demand 컴포넌트는 동시 부하 시간대를 피해 기동.
-- **디스크**: local-path PV는 노드 디스크 공유. Harbor registry 사용량 모니터링.
+- **단일 노드 자원(12GB)**: ADR-0004로 이미 리핏됨 — Prometheus retention 5d·limit 1Gi, 로그(Loki/Alloy)는 `apps-ondemand/` on-demand. 추가 압박 시 keycloak requests 추가 조정 검토. on-demand 컴포넌트는 동시 부하 시간대를 피해 기동.
+- **디스크**: local-path PV는 노드 디스크 공유. PVC 사용량 모니터링.
 - **백업**: 단일 노드 단일 장애점 → `docs/platform-backup-restore-runbook.md` 백업 주기 준수.
