@@ -84,11 +84,15 @@ kubectl get nodes   # 노드 1개 Ready
 
 ```bash
 kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl apply --server-side -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 kubectl -n argocd rollout status deploy/argocd-server
 # 초기 admin 비번
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 ```
+
+> `--server-side` 필수: applicationsets CRD가 client-side apply의 last-applied 주석 한도(256KB)를 초과한다 (2026-07-02 재구축 실측).
+>
+> **주의 (ArgoCD 3.x)**: OCI 차트 Application의 `repoURL`에 `oci://` 스킴을 쓰지 말 것 — v3.4 네이티브 OCI 경로가 chart명이 누락된 digest 조회(`/v2/<네임스페이스>/manifests/<차트버전>`)를 날려 401이 난다. 스킴 없는 `registry-1.docker.io/bitnamicharts` + `chart:` 필드 형식을 사용한다 (익명 접근 가능, repo secret 불필요 — 2026-07-02 실측).
 
 ### 3.3 sealed-secrets 컨트롤러 기동 + 새 cert 확보
 
