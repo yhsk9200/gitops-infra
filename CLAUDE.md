@@ -55,7 +55,8 @@ OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of
 
 | 항목 | 상태 |
 |---|---|
-| 클러스터 | **가동 중** — 노드 `158.179.169.201` (4 OCPU/24GB arm64, k3s v1.32.13), ArgoCD v3.4.4, **앱 10/10 Synced/Healthy**, Prometheus 타깃 13 up/0 down, 상시 메모리 ~4Gi |
+| 클러스터 | **가동 중** — 노드 `144.24.81.104`(reserved public IP, 2026-07-03 전환. 구 IP `158.179.169.201`은 release됨) (4 OCPU/24GB arm64, k3s v1.32.13), ArgoCD v3.4.4, **앱 10/10 Synced/Healthy**, Prometheus 타깃 13 up/0 down, 상시 메모리 ~4Gi |
+| 도메인 | `aporiax.duckdns.org` → `144.24.81.104` (2026-07-03 연결, PSL 등재라 Let's Encrypt 발급 가능). OCI Security List 80/443 인바운드 개방 완료 — 노드 iptables는 별도 수정 불필요(k8s hostPort 트래픽은 FORWARD 체인을 타서 INPUT REJECT 룰 영향 밖) |
 | 토폴로지 | **단일 노드** (ADR-0002), 설계 전제는 2/12 worst-case (ADR-0004) — 실측 4/24, re-fatten은 Oracle 정책 확정까지 보류 |
 | 자원 리핏 | ADR-0004: Prometheus retention 5d·limit 1Gi, **로그(Loki/Alloy)는 `apps-ondemand/` on-demand** |
 | Harbor | **제거됨** (ADR-0006) — goharbor 공식 이미지가 amd64 전용이라 arm64 노드에서 기동 불가 + 실수요 부재. 레지스트리는 GHCR, self-hosted 필요 시 zot on-demand 재검토 |
@@ -84,10 +85,12 @@ OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of
 
 ### 작업 3: 도메인/TLS → Grafana SSO
 
-- 방향 확정(2026-07-02 논의): **DuckDNS 무료 도메인**(PSL 등재 → Let's Encrypt 독립 버킷) + OCI reserved IP. nip.io는 PSL 미등재라 TLS 발급이 사실상 불가 — 도메인이 SSO 마일스톤의 선행 조건
-- `helm-values/iam/keycloak-values-prod.yaml` TODO 값 채우기, cert-manager issuer 연결
+- ✅ OCI reserved IP 전환 완료 (`144.24.81.104`), ✅ DuckDNS `aporiax.duckdns.org` 연결 완료, ✅ OCI Security List 80/443 개방 완료 (2026-07-03)
+- ✅ cert-manager ClusterIssuer(`letsencrypt-prod`, HTTP-01, Traefik) 추가, ✅ Grafana ingress 활성화(`aporiax.duckdns.org`) — 이번 PR
+- 잔여: Keycloak을 dev → prod values 전환 (`helm-values/iam/keycloak-values-prod.yaml` TODO 값 채우기 — hostname/cluster-issuer는 이제 확정값 있음, 나머지는 redirect URI 등 검토 필요)
 - Grafana SSO client 설정 — "IAM을 배포했다"에서 "IAM으로 통합했다"로 스토리를 닫는 마지막 마일
 - 참고: keycloak values는 `metrics.enabled: false` — SSO/운영 단계에서 metrics + ServiceMonitor 활성화 검토
+- 참고: Keycloak을 노출하려면 DuckDNS에 별도 서브도메인 추가 등록 필요 (같은 계정에서 도메인 여러 개 등록 가능, 예: `auth-aporiax.duckdns.org`) — 같은 도메인 하위 경로(subpath)로 붙이면 redirect URI/cookie path 이슈가 있어 비추천
 
 ### 백로그: CI에 arm64 아치 검증 잡
 
@@ -111,7 +114,7 @@ docs/
   adr/0004-refit-platform-for-12gb-free-tier.md
   adr/0005-iac-layering-and-repo-strategy.md  ← IaC 3레이어 + 모노레포 전략
   adr/0006-remove-harbor-registry-off-cluster.md  ← Harbor 제거 (arm64 제약 + GHCR)
-  cluster-access-kubeconfig.md    ← SSH 터널 접근 가이드 (노드 158.179.169.201 기준)
+  cluster-access-kubeconfig.md    ← SSH 터널 접근 가이드 (노드 144.24.81.104 기준)
   platform-alerting-todo.md       ← receiver 연결 TODO (rule은 완료)
   platform-observability-checklist.md
   platform-backup-restore-runbook.md  ← ⚠️ Harbor 절차 무효 — 작업 2에서 전면 개정
@@ -127,5 +130,6 @@ bootstrap/platform-root-infra.yaml ← 최초 부트스트랩 진입점
 
 - ~~OCI 구 인스턴스 2개 삭제~~ → 완료 (런북 Phase 0)
 - ~~새 노드 IP 확정 후 레포 전체 `<NODE_IP>` 일괄 치환~~ → 완료 (158.179.169.201, 런북 Phase 4)
+- ~~ephemeral → reserved public IP 전환 후 레포 IP 재치환~~ → 완료 (2026-07-03, `144.24.81.104`. ADR-0005/`cluster-rebuild-runbook.md`의 Phase 4 서술은 당시 시점 기록이라 의도적으로 미변경)
 - 구 클러스터용 SSH 키들을 OCI `authorized_keys`와 로컬에서 정리 — 새 클러스터는 포트 22 + `~/.ssh/id_rsa` 기준
 - postgres 현 PVC 세대의 고아 객체(`harbor_admin` 롤, `harbor_registry` DB) — 무해, 다음 재구축 때 자연 소멸 (ADR-0006 이행 메모)

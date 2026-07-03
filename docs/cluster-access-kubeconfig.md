@@ -43,7 +43,7 @@ k3s API 서버는 `6443/tcp`에서 동작합니다. 이 포트를 OCI Security L
 
 ### B. SSH 터널 + 로컬 kubeconfig — 기본 채택
 
-이미 노드 SSH 접근(`158.179.169.201:22`, OCI 키)이 있으므로, **추가 인프라 없이** 가장 안전하게 시작할 수 있는 방식입니다.
+이미 노드 SSH 접근(`144.24.81.104:22`, OCI 키)이 있으므로, **추가 인프라 없이** 가장 안전하게 시작할 수 있는 방식입니다.
 
 핵심 아이디어: API 6443은 노드 로컬(`127.0.0.1`)에만 열어두고, SSH 로컬 포트 포워딩으로 운영자 PC의 `localhost:6443`을 노드의 `localhost:6443`에 연결합니다. kubeconfig의 `server`는 `https://127.0.0.1:6443`을 그대로 두면 인증서 SAN(`127.0.0.1`은 k3s 기본 SAN에 포함)과도 어긋나지 않습니다.
 
@@ -94,7 +94,7 @@ sudo cat /etc/rancher/k3s/k3s.yaml
 ```bash
 # 운영자 PC에서 (SCP, 22 포트)
 scp -i ~/.ssh/id_rsa -P 22 \
-  ubuntu@158.179.169.201:/etc/rancher/k3s/k3s.yaml \
+  ubuntu@144.24.81.104:/etc/rancher/k3s/k3s.yaml \
   ~/.kube/oci-platform.yaml
 ```
 
@@ -114,7 +114,7 @@ kubectl --kubeconfig ~/.kube/oci-platform.yaml config rename-context default oci
 ### 4. SSH 터널 기동
 
 ```bash
-ssh -i ~/.ssh/id_rsa -p 22 -N -L 6443:127.0.0.1:6443 ubuntu@158.179.169.201
+ssh -i ~/.ssh/id_rsa -p 22 -N -L 6443:127.0.0.1:6443 ubuntu@144.24.81.104
 ```
 
 - `-N`: 원격 명령 없이 포트 포워딩만 수행

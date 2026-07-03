@@ -234,11 +234,11 @@ kubeseal --fetch-cert \
 
 ## 10. 현재 상태와 로드맵
 
-**현재 상태**: 단일 노드 재구축 **완료** (2026-07-02, 런북 검증 체크리스트 통과). 노드 `158.179.169.201`(k3s v1.32.13, arm64)에서 전 애플리케이션 Synced/Healthy로 가동 중입니다. 설계는 Always Free worst-case(2 OCPU/12GB, [ADR-0004](docs/adr/0004-refit-platform-for-12gb-free-tier.md)) 기준의 lean 상시 + on-demand 구조를 유지합니다. 재구축 과정에서 발견된 아키텍처 제약으로 Harbor를 제거하고 레지스트리를 오프클러스터화했습니다 ([ADR-0006](docs/adr/0006-remove-harbor-registry-off-cluster.md)).
+**현재 상태**: 단일 노드 재구축 **완료** (2026-07-02, 런북 검증 체크리스트 통과). 노드 `144.24.81.104`(reserved public IP, k3s v1.32.13, arm64)에서 전 애플리케이션 Synced/Healthy로 가동 중입니다. `aporiax.duckdns.org` 도메인 연결 및 cert-manager(Let's Encrypt) 발급 완료로 Grafana가 TLS로 외부 노출되어 있습니다. 설계는 Always Free worst-case(2 OCPU/12GB, [ADR-0004](docs/adr/0004-refit-platform-for-12gb-free-tier.md)) 기준의 lean 상시 + on-demand 구조를 유지합니다. 재구축 과정에서 발견된 아키텍처 제약으로 Harbor를 제거하고 레지스트리를 오프클러스터화했습니다 ([ADR-0006](docs/adr/0006-remove-harbor-registry-off-cluster.md)).
 
 로드맵 (우선순위 순):
 
 1. Alertmanager receiver 연결 (알림 채널 확정 후)
 2. 백업 런북 개정(Harbor 제거 반영) + 절차 스크립트화 + 반출 리허설
-3. 도메인/TLS 확정(DuckDNS + cert-manager) → Keycloak → Grafana SSO 연동
+3. Keycloak을 prod values로 전환 → Grafana SSO 연동 (도메인/TLS는 확정 완료)
 4. AI 모델 시뮬레이터 플랫폼 (MLflow + MinIO, 별도 레포 — ADR-0001)
