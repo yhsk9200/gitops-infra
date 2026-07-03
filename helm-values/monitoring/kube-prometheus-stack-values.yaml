@@ -19,7 +19,17 @@ grafana:
     size: 10Gi
 
   ingress:
-    enabled: false
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - aporiax.duckdns.org
+    tls:
+      - secretName: grafana-tls
+        hosts:
+          - aporiax.duckdns.org
+    annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+      cert-manager.io/cluster-issuer: letsencrypt-prod
 
   resources:
     requests:
