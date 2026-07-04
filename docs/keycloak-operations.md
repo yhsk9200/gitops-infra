@@ -4,11 +4,11 @@
 
 ## 현재 운영 상태
 
-- 현재 Argo CD 애플리케이션은 `helm-values/iam/keycloak-values-dev.yaml`을 사용합니다.
-- `helm-values/iam/keycloak-values-prod.yaml`은 운영 노출을 위한 템플릿이며 아직 실제 배포에 사용하지 않습니다.
+- 현재 Argo CD 애플리케이션은 `helm-values/iam/keycloak-values-prod.yaml`을 사용합니다 (2026-07-03 전환).
+- 외부 도메인 `https://aporiax-auth.duckdns.org`로 노출되어 있습니다 (Traefik Ingress + cert-manager `letsencrypt-prod`).
+- `production: true`, `hostnameStrict: true`, `proxyHeaders: xforwarded` — TLS는 Traefik에서 종료되고 Keycloak은 내부 HTTP로 서빙합니다.
 - Keycloak은 자체 PostgreSQL을 띄우지 않고 `platform-db-postgres`의 `keycloak_db`를 사용합니다.
-- 외부 도메인이 아직 없으므로 Ingress는 비활성화되어 있습니다.
-- 관리자 콘솔 접근은 필요할 때 `kubectl port-forward`로 확인합니다.
+- `keycloak-values-dev.yaml`은 도메인 없이 재구축/디버깅할 때를 위한 대비책으로 유지합니다.
 
 ## 관련 리소스
 
@@ -50,17 +50,13 @@ kubectl logs -n platform-iam statefulset/platform-iam-keycloak --tail=200
 
 ## 관리자 콘솔 접속
 
-도메인이 없는 현재 단계에서는 port-forward로 접속합니다.
-
-```bash
-kubectl port-forward -n platform-iam svc/platform-iam-keycloak 8080:80
-```
-
-브라우저에서 아래 주소로 접속합니다.
+기본 경로는 외부 도메인입니다.
 
 ```text
-http://127.0.0.1:8080
+https://aporiax-auth.duckdns.org
 ```
+
+> `hostnameStrict: true`이므로 port-forward로 `127.0.0.1:8080`에 접속하면 설정된 hostname으로 리다이렉트되거나 URL 불일치 오류가 날 수 있습니다. port-forward 진단은 Ingress/도메인 장애로 외부 경로가 죽었을 때의 보조 수단으로만 사용하고, 이때도 콘솔 로그인이 아니라 헬스 엔드포인트 확인 위주로 씁니다.
 
 관리자 계정:
 
@@ -104,7 +100,7 @@ WHERE d.datname = 'keycloak_db';
 
 값이 다르면 Keycloak은 DB에 접속하지 못합니다.
 
-## 현재 dev 값의 의미
+## dev 값의 의미 (대비책 파일 `keycloak-values-dev.yaml`)
 
 - `ingress.enabled: false`
   - 도메인이 아직 없으므로 외부 노출을 하지 않습니다.
@@ -117,17 +113,13 @@ WHERE d.datname = 'keycloak_db';
 - `automountServiceAccountToken: false`
   - Keycloak이 Kubernetes API를 직접 호출하지 않으므로 pod에 ServiceAccount 토큰을 마운트하지 않습니다.
 
-## 도메인 확정 후 전환 항목
+## 도메인 확정 후 전환 항목 — ✅ 전환 완료 (2026-07-03)
 
-도메인과 TLS가 확정되면 아래 항목을 검토합니다.
-
-- `keycloak-values-prod.yaml`의 `ingress.hostname`
-- `keycloak-values-prod.yaml`의 cert-manager issuer
-- `production: true`
-- `proxyHeaders: xforwarded`
-- `hostnameStrict: true`
-- OIDC client redirect URI
-- Grafana / API Gateway와의 SSO 연동
+- ~~`keycloak-values-prod.yaml`의 `ingress.hostname`~~ → `aporiax-auth.duckdns.org`
+- ~~`keycloak-values-prod.yaml`의 cert-manager issuer~~ → `letsencrypt-prod`
+- ~~`production: true` / `proxyHeaders: xforwarded` / `hostnameStrict: true`~~ → 적용됨
+- OIDC client redirect URI — Grafana SSO 연동 시 설정 (잔여)
+- Grafana / API Gateway와의 SSO 연동 (잔여)
 
 ## 장애별 빠른 점검
 
@@ -169,8 +161,7 @@ kubectl logs -n platform-iam statefulset/platform-iam-keycloak --tail=200
 
 ## 운영 원칙
 
-- 도메인이 생기기 전까지는 dev values를 사용합니다.
-- 운영 전환 전에는 prod values를 그대로 적용하지 말고 TODO 값을 먼저 채웁니다.
+- prod values가 기본입니다. dev values는 도메인/Ingress 없이 재구축·디버깅하는 상황의 대비책입니다.
 - realm, client, role 변경은 수동으로 하더라도 반드시 문서에 남깁니다.
 - 반복 배포가 필요해지면 `keycloakConfigCli`를 검토합니다.
 

@@ -1,9 +1,9 @@
 # =============================================================================
-# Keycloak values template for a future production exposure
+# Keycloak values for production exposure (aporiax-auth.duckdns.org)
 # =============================================================================
-# This file is intentionally not used by the current Argo CD Application.
-# Fill the TODO values after the production domain, TLS, and redirect URI plan
-# are confirmed.
+# Active since 2026-07-03: domain/TLS confirmed (DuckDNS + letsencrypt-prod).
+# TLS terminates at Traefik; Keycloak serves HTTP internally behind
+# proxyHeaders=xforwarded, so httpEnabled stays true.
 # =============================================================================
 
 global:
@@ -39,11 +39,11 @@ httpEnabled: true
 ingress:
   enabled: true
   ingressClassName: traefik
-  hostname: auth.example.com
+  hostname: aporiax-auth.duckdns.org
   tls: true
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    cert-manager.io/cluster-issuer: TODO_CLUSTER_ISSUER
+    cert-manager.io/cluster-issuer: letsencrypt-prod
 
 automountServiceAccountToken: false
 

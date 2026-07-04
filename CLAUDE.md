@@ -56,7 +56,8 @@ OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of
 | 항목 | 상태 |
 |---|---|
 | 클러스터 | **가동 중** — 노드 `144.24.81.104`(reserved public IP, 2026-07-03 전환. 구 IP `158.179.169.201`은 release됨) (4 OCPU/24GB arm64, k3s v1.32.13), ArgoCD v3.4.4, **앱 10/10 Synced/Healthy**, Prometheus 타깃 13 up/0 down, 상시 메모리 ~4Gi |
-| 도메인 | `aporiax.duckdns.org` → `144.24.81.104` (2026-07-03 연결, PSL 등재라 Let's Encrypt 발급 가능). OCI Security List 80/443 인바운드 개방 완료 — 노드 iptables는 별도 수정 불필요(k8s hostPort 트래픽은 FORWARD 체인을 타서 INPUT REJECT 룰 영향 밖) |
+| 도메인 | `aporiax.duckdns.org`(Grafana)·`aporiax-auth.duckdns.org`(Keycloak) → `144.24.81.104` (PSL 등재라 Let's Encrypt 발급 가능). OCI Security List 80/443 인바운드 개방 완료 — 노드 iptables는 별도 수정 불필요(k8s hostPort 트래픽은 FORWARD 체인을 타서 INPUT REJECT 룰 영향 밖) |
+| 외부 노출 | Grafana `https://aporiax.duckdns.org` (LE 인증서 확인 2026-07-03), Keycloak `https://aporiax-auth.duckdns.org` (prod values 전환). ArgoCD/Prometheus/Alertmanager는 **의도적 비노출** — SSH 터널 전용 |
 | 토폴로지 | **단일 노드** (ADR-0002), 설계 전제는 2/12 worst-case (ADR-0004) — 실측 4/24, re-fatten은 Oracle 정책 확정까지 보류 |
 | 자원 리핏 | ADR-0004: Prometheus retention 5d·limit 1Gi, **로그(Loki/Alloy)는 `apps-ondemand/` on-demand** |
 | Harbor | **제거됨** (ADR-0006) — goharbor 공식 이미지가 amd64 전용이라 arm64 노드에서 기동 불가 + 실수요 부재. 레지스트리는 GHCR, self-hosted 필요 시 zot on-demand 재검토 |
@@ -65,7 +66,7 @@ OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of
 | 공용 Redis | 제거됨 (ADR-0003) — 이후 Harbor 자체도 ADR-0006으로 제거 |
 | Alerting | v1 PrometheusRule 가동 중 (`platform-monitoring-rules`, wave 5) — receiver는 채널 확정 후 |
 | CI | `validate.yaml` — kubeconform + helm template 7종. PR #1~#4 전부 CI 통과 후 머지 |
-| gh CLI | 설치됨, **미인증** — PR 생성/머지는 GitHub 웹(폰 가능)으로. `gh auth login`은 브라우저 필요 |
+| gh CLI | **인증 완료** (2026-07-03, yhsk9200) — PR 생성·CI 확인·머지까지 CLI로 가능 (`gh pr create` → `gh pr checks --watch` → `gh pr merge --squash --delete-branch`) |
 
 ## 다음 작업 — 우선순위 순
 
@@ -85,12 +86,10 @@ OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of
 
 ### 작업 3: 도메인/TLS → Grafana SSO
 
-- ✅ OCI reserved IP 전환 완료 (`144.24.81.104`), ✅ DuckDNS `aporiax.duckdns.org` 연결 완료, ✅ OCI Security List 80/443 개방 완료 (2026-07-03)
-- ✅ cert-manager ClusterIssuer(`letsencrypt-prod`, HTTP-01, Traefik) 추가, ✅ Grafana ingress 활성화(`aporiax.duckdns.org`) — 이번 PR
-- 잔여: Keycloak을 dev → prod values 전환 (`helm-values/iam/keycloak-values-prod.yaml` TODO 값 채우기 — hostname/cluster-issuer는 이제 확정값 있음, 나머지는 redirect URI 등 검토 필요)
-- Grafana SSO client 설정 — "IAM을 배포했다"에서 "IAM으로 통합했다"로 스토리를 닫는 마지막 마일
+- ✅ 도메인/TLS 인프라 완료 (2026-07-03): reserved IP, DuckDNS 2개(`aporiax`/`aporiax-auth`), Security List 80/443, ClusterIssuer `letsencrypt-prod`, Grafana TLS 노출 (PR #5)
+- ✅ Keycloak prod 전환: `keycloak-values-prod.yaml` 활성 (hostname `aporiax-auth.duckdns.org`, issuer 연결, production/hostnameStrict/xforwarded 적용) — 이번 PR
+- **잔여 (PR B — Grafana SSO)**: Keycloak realm/client 생성(`keycloak-rbac-plan.md` 재사용) → OIDC client secret용 SealedSecret 신규 추가 → Grafana values에 `auth.generic_oauth` + `server.root_url` 설정 → role 매핑 → SSO 로그인 실측
 - 참고: keycloak values는 `metrics.enabled: false` — SSO/운영 단계에서 metrics + ServiceMonitor 활성화 검토
-- 참고: Keycloak을 노출하려면 DuckDNS에 별도 서브도메인 추가 등록 필요 (같은 계정에서 도메인 여러 개 등록 가능, 예: `auth-aporiax.duckdns.org`) — 같은 도메인 하위 경로(subpath)로 붙이면 redirect URI/cookie path 이슈가 있어 비추천
 
 ### 백로그: CI에 arm64 아치 검증 잡
 
