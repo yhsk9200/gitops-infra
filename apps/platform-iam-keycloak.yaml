@@ -15,7 +15,7 @@ spec:
       targetRevision: "25.2.0"
       helm:
         valueFiles:
-          - $values/helm-values/iam/keycloak-values-dev.yaml
+          - $values/helm-values/iam/keycloak-values-prod.yaml
     - repoURL: https://github.com/yhsk9200/gitops-infra.git
       targetRevision: main
       ref: values
