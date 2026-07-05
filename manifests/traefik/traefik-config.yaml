@@ -14,10 +14,13 @@ metadata:
   namespace: kube-system
 spec:
   valuesContent: |-
+    # 차트 39.x 스키마: redirections는 ports.web."http" 하위다 (http 단계 누락 시
+    # 오류 없이 조용히 무시됨 — helm job 로그의 REVISION 증가만 보고 성공으로 오판 주의)
     ports:
       web:
-        redirections:
-          entryPoint:
-            to: websecure
-            scheme: https
-            permanent: true
+        http:
+          redirections:
+            entryPoint:
+              to: websecure
+              scheme: https
+              permanent: true
