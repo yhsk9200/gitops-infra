@@ -30,9 +30,16 @@ grafana:
   # 트레이드오프: 롤아웃마다 수십 초 다운 — 단독 운영이라 수용.
   deploymentStrategy:
     type: Recreate
-    # 기존 라이브 오브젝트의 rollingUpdate 파라미터를 명시적으로 비워야 apply가 통과한다
-    # (type만 바꾸면 "rollingUpdate: Forbidden: may not be specified when type is Recreate")
+    # RollingUpdate→Recreate 전이 시 라이브에 남은 rollingUpdate 파라미터를 지워야
+    # 검증을 통과한다("rollingUpdate: Forbidden ..."). 단 SSA는 null을 필드 삭제로
+    # 해석하지 않으므로, 아래 annotations의 per-resource CSA 강제와 세트다.
     rollingUpdate: null
+
+  # 이 Deployment만 client-side apply 강제: CSA의 strategic-merge는 rollingUpdate: null을
+  # 필드 삭제로 처리하지만, 앱 전역 ServerSideApply=true 경로는 null을 무시해 위 전이가
+  # 영영 적용되지 않는다 (2026-07-05 실측: SSA 병합 결과 검증에서 Forbidden 반복).
+  annotations:
+    argocd.argoproj.io/sync-options: ServerSideApply=false
 
   ingress:
     enabled: true
