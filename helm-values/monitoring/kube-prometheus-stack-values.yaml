@@ -18,6 +18,19 @@ grafana:
       - ReadWriteOnce
     size: 10Gi
 
+  # Grafana가 첫 기동 후 만드는 png/pdf/csv(472 소유, 0700)를 init-chown-data(root,
+  # capabilities drop ALL이라 DAC_OVERRIDE 없음)가 순회하지 못해 두 번째 롤아웃부터
+  # 전부 교착된다. 소유권은 첫 기동에 이미 확정되고 local-path는 0777로 프로비저닝
+  # 하므로 chown 자체가 불필요 — init을 끄는 쪽이 권한 추가보다 안전하다.
+  initChownData:
+    enabled: false
+
+  # RWO PVC + SQLite(grafana.db)는 롤링 중 신구 pod가 동시에 마운트하는 것 자체가
+  # 위험하다(단일 노드라 마운트는 성공해버림). 구 pod 종료 후 기동으로 강제.
+  # 트레이드오프: 롤아웃마다 수십 초 다운 — 단독 운영이라 수용.
+  deploymentStrategy:
+    type: Recreate
+
   ingress:
     enabled: true
     ingressClassName: traefik
