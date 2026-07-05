@@ -28,15 +28,11 @@ grafana:
   # RWO PVC + SQLite(grafana.db)는 롤링 중 신구 pod가 동시에 마운트하는 것 자체가
   # 위험하다(단일 노드라 마운트는 성공해버림). 구 pod 종료 후 기동으로 강제.
   # 트레이드오프: 롤아웃마다 수십 초 다운 — 단독 운영이라 수용.
+  # RollingUpdate→Recreate 전이는 병합 계열 apply로 불가능했다(SSA는 null을 필드 삭제로
+  # 안 봄 → rollingUpdate 잔존 Forbidden, CSA는 last-applied 부재로 스테일 initContainers
+  # 미삭제). 1회성 Replace=true 어노테이션으로 전이 완료 후 SSA 복귀함 (PR #10~#11, 2026-07-05).
   deploymentStrategy:
     type: Recreate
-
-  # RollingUpdate→Recreate 마이그레이션(2026-07-05): 병합 계열 apply로는 전이가 안 된다 —
-  # SSA는 null을 필드 삭제로 안 보고(rollingUpdate 잔존 → Forbidden), CSA는 last-applied가
-  # 없어(원래 SSA 관리) 스테일 initContainers를 못 지운다. Replace로 라이브를 렌더 결과와
-  # 정확히 일치시킨다. 전이 완료 후에는 이 어노테이션을 제거해 SSA로 복귀할 것.
-  annotations:
-    argocd.argoproj.io/sync-options: Replace=true
 
   ingress:
     enabled: true

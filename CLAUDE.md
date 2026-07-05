@@ -51,11 +51,13 @@ OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of
 - ArgoCD Application 파일·이름: `platform-<도메인>-<컴포넌트>` (예: `platform-iam-keycloak`)
 - 네임스페이스: `platform-<도메인>` (예: `platform-iam`)
 
-## 현재 상태 (2026-07-02) — ✅ 재구축 완료, 클러스터 그린
+## 현재 상태 (2026-07-05) — ✅ 재구축 완료, 클러스터 그린
 
 | 항목 | 상태 |
 |---|---|
-| 클러스터 | **가동 중** — 노드 `144.24.81.104`(reserved public IP, 2026-07-03 전환. 구 IP `158.179.169.201`은 release됨) (4 OCPU/24GB arm64, k3s v1.32.13), ArgoCD v3.4.4, **앱 10/10 Synced/Healthy**, Prometheus 타깃 13 up/0 down, 상시 메모리 ~4Gi |
+| 클러스터 | **가동 중** — 노드 `144.24.81.104`(reserved public IP, 2026-07-03 전환. 구 IP `158.179.169.201`은 release됨) (4 OCPU/24GB arm64, k3s v1.32.13), ArgoCD v3.4.4, **앱 12/12 Synced/Healthy**, 상시 메모리 ~4.5Gi |
+| Grafana 배포 전략 | **Recreate + initChownData 비활성** (PR #7~#11, 2026-07-05 인시던트): ① init-chown-data가 root여도 capabilities drop ALL이라 Grafana 자신이 만든 0700 디렉토리(png/pdf/csv)를 순회 못해 2번째 롤아웃부터 전부 교착 → init 비활성. ② RWO PVC+SQLite라 Recreate 전환 — 단 전이가 SSA(null 무시)·CSA(last-applied 부재) 모두로 불가, 1회성 `Replace=true`로 전이 후 SSA 복귀. ③ admission webhook TLS는 hook Job이 ArgoCD 훅 엔진과 교착해 **cert-manager 발급으로 전환** (`certManager.enabled: true`) |
+| HTTP 리다이렉트 | **전역 301 → HTTPS** (PR #12~#13): k3s 번들 Traefik을 GitOps 관리 `HelmChartConfig`(`manifests/traefik/`)로 오버라이드. 주의: 차트 39.x 스키마는 `ports.web.http.redirections`(http 단계 누락 시 조용히 무시됨) |
 | 도메인 | `aporiax.duckdns.org`(Grafana)·`aporiax-auth.duckdns.org`(Keycloak) → `144.24.81.104` (PSL 등재라 Let's Encrypt 발급 가능). OCI Security List 80/443 인바운드 개방 완료 — 노드 iptables는 별도 수정 불필요(k8s hostPort 트래픽은 FORWARD 체인을 타서 INPUT REJECT 룰 영향 밖) |
 | 외부 노출 | Grafana `https://aporiax.duckdns.org` (LE 인증서 확인 2026-07-03), Keycloak `https://aporiax-auth.duckdns.org` (prod values 전환). ArgoCD/Prometheus/Alertmanager는 **의도적 비노출** — SSH 터널 전용 |
 | 토폴로지 | **단일 노드** (ADR-0002), 설계 전제는 2/12 worst-case (ADR-0004) — 실측 4/24, re-fatten은 Oracle 정책 확정까지 보류 |
@@ -65,7 +67,7 @@ OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of
 | Bitnami | 차트 `registry-1.docker.io/bitnamicharts` (**스킴 없는 repoURL — `oci://`는 ArgoCD 3.x에서 401**, 런북 3.2 주의), 이미지 `bitnamilegacy` 핀 (postgres `17.6.0`, keycloak `26.3.3`, os-shell `12-debian-12-r51` — 전부 arm64 확인됨). sealed-secrets 차트는 `bitnami.github.io/sealed-secrets`(구 bitnami-labs 호스트는 404) |
 | 공용 Redis | 제거됨 (ADR-0003) — 이후 Harbor 자체도 ADR-0006으로 제거 |
 | Alerting | v1 PrometheusRule 가동 중 (`platform-monitoring-rules`, wave 5) — receiver는 채널 확정 후 |
-| CI | `validate.yaml` — kubeconform + helm template 7종. PR #1~#4 전부 CI 통과 후 머지 |
+| CI | `validate.yaml` — kubeconform + helm template 7종. PR #1~#13 전부 CI 통과 후 머지 (**단 브랜치 보호 미설정** — 체크 등록 전 머지가 물리적으로 가능함이 PR #8에서 실증됨, 백로그 참조) |
 | gh CLI | **인증 완료** (2026-07-03, yhsk9200) — PR 생성·CI 확인·머지까지 CLI로 가능 (`gh pr create` → `gh pr checks --watch` → `gh pr merge --squash --delete-branch`) |
 
 ## 다음 작업 — 우선순위 순
@@ -95,6 +97,10 @@ OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of
 
 ADR-0006 교훈 — 핀 고정 이미지 전수의 `linux/arm64` manifest 존재를 CI에서 검증 (Docker Hub manifest 조회). Harbor 재발 방지.
 
+### 백로그: main 브랜치 보호 (required status checks)
+
+PR #8에서 CI 체크가 등록되기 전에 `gh pr merge`가 통과해버리는 갭 실증. GitHub 브랜치 보호에서 validate 2종을 required로 지정하면 닫힘 — "PR이 유일한 사전 안전장치"라는 전략의 마지막 구멍.
+
 ### 장기: AI 모델 시뮬레이터 플랫폼
 
 ADR-0001 — MLflow + MinIO, 별도 레포로 분리. 미착수.
@@ -118,10 +124,10 @@ docs/
   platform-observability-checklist.md
   platform-backup-restore-runbook.md  ← ⚠️ Harbor 절차 무효 — 작업 2에서 전면 개정
   keycloak-operations.md / keycloak-rbac-plan.md / keycloak-manual-rbac-checklist.md
-apps/                              ← ArgoCD Application 9개 + AppProject 1개 (root 자동 동기화, 상시)
+apps/                              ← ArgoCD Application 11개 + AppProject 1개 (root 자동 동기화, 상시)
 apps-ondemand/                     ← on-demand Application (loki, alloy — ADR-0004)
 helm-values/                       ← 컴포넌트별 Helm values (트레이드오프 주석 포함)
-manifests/                         ← 네임스페이스, SealedSecret, 스토리지, PrometheusRule
+manifests/                         ← 네임스페이스, SealedSecret, 스토리지, PrometheusRule, ClusterIssuer, Traefik HelmChartConfig
 bootstrap/platform-root-infra.yaml ← 최초 부트스트랩 진입점
 ```
 
