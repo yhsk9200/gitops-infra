@@ -121,6 +121,15 @@ alertmanager:
         cpu: 200m
         memory: 256Mi
 
+# admission webhook TLS를 helm hook Job(create/patch) 대신 cert-manager로 발급.
+# hook 방식은 SA/RBAC에 pre+post 훅 4종이 달려 ArgoCD 훅 엔진이 완료 판정을 못 하고
+# sync가 교착된다(2026-07-05 실측: Job Complete 후 SA hookPhase=Running 고착).
+# cert-manager는 wave 0에서 이미 상시 가동 중 — 훅 리소스 자체를 제거하는 정석 경로.
+prometheusOperator:
+  admissionWebhooks:
+    certManager:
+      enabled: true
+
 nodeExporter:
   enabled: true
 
