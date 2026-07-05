@@ -1,0 +1,23 @@
+# k3s 번들 Traefik(HelmChart traefik@kube-system)의 values 오버라이드.
+# k3s helm controller는 클러스터 안 어디서 apply되든 HelmChartConfig를 인식하므로
+# 노드 파일(/var/lib/rancher/k3s/server/manifests/) 대신 GitOps로 관리한다.
+#
+# web(80) 진입점 전체를 websecure(443)로 301 리다이렉트한다.
+# - 현재 노출 Ingress는 Grafana/Keycloak 2개뿐이라 전역 적용의 부수 영향 없음
+# - ACME HTTP-01: Let's Encrypt는 챌린지의 리다이렉트를 따라가며 이때 대상 인증서를
+#   검증하지 않으므로 발급/갱신에 영향 없음 (표준 k3s 구성 패턴)
+# - 적용 시 k3s helm controller가 Traefik을 재배포하므로 수 초 순단 발생
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    ports:
+      web:
+        redirections:
+          entryPoint:
+            to: websecure
+            scheme: https
+            permanent: true
