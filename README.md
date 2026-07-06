@@ -238,7 +238,7 @@ kubeseal --fetch-cert \
 
 로드맵 (우선순위 순):
 
-1. Grafana SSO 연동 (Keycloak OIDC — realm/client, SealedSecret, role 매핑)
+1. ~~Grafana SSO 연동~~ → 완료 (Keycloak `platform` realm OIDC, PKCE, realm role → Grafana role 매핑)
 2. Alertmanager receiver 연결 (알림 채널 확정 후)
 3. 백업 런북 개정(Harbor 제거 반영) + 절차 스크립트화 + 반출 리허설
 4. AI 모델 시뮬레이터 플랫폼 (MLflow + MinIO, 별도 레포 — ADR-0001)

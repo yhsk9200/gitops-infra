@@ -118,8 +118,8 @@ WHERE d.datname = 'keycloak_db';
 - ~~`keycloak-values-prod.yaml`의 `ingress.hostname`~~ → `aporiax-auth.duckdns.org`
 - ~~`keycloak-values-prod.yaml`의 cert-manager issuer~~ → `letsencrypt-prod`
 - ~~`production: true` / `proxyHeaders: xforwarded` / `hostnameStrict: true`~~ → 적용됨
-- OIDC client redirect URI — Grafana SSO 연동 시 설정 (잔여)
-- Grafana / API Gateway와의 SSO 연동 (잔여)
+- ~~OIDC client redirect URI~~ → `grafana` client 생성 완료 (2026-07-06, redirect `https://aporiax.duckdns.org/login/generic_oauth`)
+- ~~Grafana와의 SSO 연동~~ → `auth.generic_oauth` 배포 완료 (API Gateway 연동은 향후 과제)
 
 ## 장애별 빠른 점검
 

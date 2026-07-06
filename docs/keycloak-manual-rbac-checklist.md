@@ -1,5 +1,7 @@
 # Keycloak 수동 RBAC 설정 체크리스트
 
+> **✅ 실행 완료 (2026-07-06)**: 본 체크리스트의 realm/role/group/user 전체와 §5에서 보류했던 `grafana` client까지 kcadm 스크립트로 생성 완료 (도메인 확정됨). 상세는 `keycloak-rbac-plan.md`의 수동 변경 기록 참조. 이 문서는 재구축 시 재사용할 절차 템플릿으로 유지한다.
+
 이 문서는 도메인이 아직 없는 현재 단계에서 Keycloak 관리자 콘솔로 수동 생성할 수 있는 최소 RBAC 기준을 정리합니다.
 
 목표는 SSO 최종 연동이 아니라, 나중에 Grafana/API 연동을 붙일 때 재사용할 수 있는 realm, role, group, test user의 기준점을 만드는 것입니다.
