@@ -47,6 +47,30 @@ grafana:
       traefik.ingress.kubernetes.io/router.entrypoints: websecure
       cert-manager.io/cluster-issuer: letsencrypt-prod
 
+  # OIDC client secret은 SealedSecret(grafana-oidc-secret)의 env로 주입 —
+  # GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET 환경변수가 grafana.ini 값을 대체하므로
+  # ini에는 client_secret을 두지 않는다 (Git 평문 금지).
+  envFromSecret: grafana-oidc-secret
+
+  grafana.ini:
+    server:
+      # OAuth redirect 생성에 필수 — ingress 도메인과 일치해야 함
+      root_url: https://aporiax.duckdns.org
+    auth.generic_oauth:
+      enabled: true
+      name: Keycloak
+      # platform realm 사용자는 최소 Viewer로 자동 가입 허용 (realm 자체가 사내 경계)
+      allow_sign_up: true
+      client_id: grafana
+      scopes: openid email profile
+      auth_url: https://aporiax-auth.duckdns.org/realms/platform/protocol/openid-connect/auth
+      token_url: https://aporiax-auth.duckdns.org/realms/platform/protocol/openid-connect/token
+      api_url: https://aporiax-auth.duckdns.org/realms/platform/protocol/openid-connect/userinfo
+      use_pkce: true
+      # realm role → Grafana role 매핑 (client의 realm-roles mapper가 id_token/userinfo에
+      # realm_access.roles를 노출해야 동작 — kcadm 셋업 스크립트가 생성함)
+      role_attribute_path: contains(realm_access.roles[*], 'platform-admin') && 'Admin' || contains(realm_access.roles[*], 'platform-operator') && 'Editor' || 'Viewer'
+
   resources:
     requests:
       cpu: 100m

@@ -79,4 +79,4 @@ Keycloak UI에서 수동 변경을 했다면 아래 표에 기록합니다.
 
 | 날짜 | 작업자 | 변경 내용 | 비고 |
 | --- | --- | --- | --- |
-|  |  |  |  |
+| 2026-07-06 | 운영자 (kcadm 스크립트) | realm `platform` 생성. realm role 4종(`platform-admin/operator/viewer`, `service-admin`), group 3종(`platform-admins/operators/viewers`) + role 바인딩. client `grafana`(confidential, PKCE S256, redirect `https://aporiax.duckdns.org/login/generic_oauth`, direct grant 비활성) + `realm-roles-in-tokens` mapper(id_token/userinfo에 `realm_access.roles` 노출). 테스트 사용자 3명(`*-test`, 임시 비밀번호·첫 로그인 변경 강제) | UI가 아닌 파드 내 kcadm으로 실행(멱등 스크립트). client secret은 SealedSecret(`grafana-oidc-secret`)과 동일 값 |

@@ -86,12 +86,13 @@ OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of
 
 `docs/platform-backup-restore-runbook.md` — Harbor 제거(ADR-0006)로 문서 상단에 무효 표기된 상태. 백업 대상을 postgres(keycloak_db)·SealedSecret 원본·컨트롤러 키 기준으로 재정의 → 스크립트화 + 반출 리허설.
 
-### 작업 3: 도메인/TLS → Grafana SSO
+### 작업 3: 도메인/TLS → Grafana SSO — ✅ 배포 완료 (2026-07-06)
 
-- ✅ 도메인/TLS 인프라 완료 (2026-07-03): reserved IP, DuckDNS 2개(`aporiax`/`aporiax-auth`), Security List 80/443, ClusterIssuer `letsencrypt-prod`, Grafana TLS 노출 (PR #5)
-- ✅ Keycloak prod 전환: `keycloak-values-prod.yaml` 활성 (hostname `aporiax-auth.duckdns.org`, issuer 연결, production/hostnameStrict/xforwarded 적용) — 이번 PR
-- **잔여 (PR B — Grafana SSO)**: Keycloak realm/client 생성(`keycloak-rbac-plan.md` 재사용) → OIDC client secret용 SealedSecret 신규 추가 → Grafana values에 `auth.generic_oauth` + `server.root_url` 설정 → role 매핑 → SSO 로그인 실측
-- 참고: keycloak values는 `metrics.enabled: false` — SSO/운영 단계에서 metrics + ServiceMonitor 활성화 검토
+- ✅ 도메인/TLS 인프라 (2026-07-03, PR #5), ✅ Keycloak prod 전환 (PR #6)
+- ✅ Keycloak `platform` realm 구성 (2026-07-06, 파드 내 kcadm 멱등 스크립트): role 4종·group 3종·client `grafana`(PKCE, direct grant 비활성)·realm-roles mapper·테스트 사용자 3명 — `keycloak-rbac-plan.md` 수동 변경 기록 참조
+- ✅ SealedSecret `grafana-oidc-secret` + Grafana `auth.generic_oauth`(role_attribute_path로 platform-admin→Admin, operator→Editor, 기타→Viewer) — PR B
+- **잔여 (수동 1건)**: 브라우저에서 `platform-admin-test`로 SSO 로그인 실측 (임시 비밀번호는 로컬 `~/.keycloak-sso-20260706.txt`, 첫 로그인 시 변경 강제. **비밀번호 관리자 이관 후 파일 삭제**)
+- 참고: keycloak values는 `metrics.enabled: false` — 운영 안정화 후 metrics + ServiceMonitor 활성화 검토
 
 ### 백로그: CI에 arm64 아치 검증 잡
 
