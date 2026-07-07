@@ -67,7 +67,7 @@ OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of
 | Bitnami | 차트 `registry-1.docker.io/bitnamicharts` (**스킴 없는 repoURL — `oci://`는 ArgoCD 3.x에서 401**, 런북 3.2 주의), 이미지 `bitnamilegacy` 핀 (postgres `17.6.0`, keycloak `26.3.3`, os-shell `12-debian-12-r51` — 전부 arm64 확인됨). sealed-secrets 차트는 `bitnami.github.io/sealed-secrets`(구 bitnami-labs 호스트는 404) |
 | 공용 Redis | 제거됨 (ADR-0003) — 이후 Harbor 자체도 ADR-0006으로 제거 |
 | Alerting | v1 PrometheusRule 가동 중 (`platform-monitoring-rules`, wave 5) — receiver는 채널 확정 후 |
-| CI | `validate.yaml` — kubeconform + helm template 7종. **브랜치 보호 설정 완료** (2026-07-07): main은 PR 필수 + required status checks(`kubeconform (raw manifests)`·`helm template (pinned charts x values)`) + admin 우회 불가 + force-push/삭제 금지. required 데드락 방지를 위해 `pull_request` paths 필터 제거 → 모든 PR에서 validate 실행. pulse 레포도 동일 보호(required: `lint-typecheck-build`·`validate-manifests`) |
+| CI | `validate.yaml` — kubeconform + helm template 7종 + **arm64 manifest 가드**(핀 이미지 3종 `docker buildx imagetools inspect`, ADR-0006 재발 방지). **브랜치 보호 설정 완료** (2026-07-07): main은 PR 필수 + required status checks 3종(`kubeconform (raw manifests)`·`helm template (pinned charts x values)`·`arm64 manifest (pinned images)`) + admin 우회 불가 + force-push/삭제 금지. required 데드락 방지를 위해 `pull_request` paths 필터 제거 → 모든 PR에서 validate 실행. pulse 레포도 동일 보호(required: `lint-typecheck-build`·`validate-manifests`) |
 | gh CLI | **인증 완료** (2026-07-03, yhsk9200) — PR 생성·CI 확인·머지까지 CLI로 가능 (`gh pr create` → `gh pr checks --watch` → `gh pr merge --squash --delete-branch`) |
 
 ## 다음 작업 — 우선순위 순
@@ -94,9 +94,9 @@ OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of
 - **잔여 (수동 1건)**: 브라우저에서 `platform-admin-test`로 SSO 로그인 실측 (임시 비밀번호는 로컬 `~/.keycloak-sso-20260706.txt`, 첫 로그인 시 변경 강제. **비밀번호 관리자 이관 후 파일 삭제**)
 - 참고: keycloak values는 `metrics.enabled: false` — 운영 안정화 후 metrics + ServiceMonitor 활성화 검토
 
-### 백로그: CI에 arm64 아치 검증 잡
+### ~~백로그: CI에 arm64 아치 검증 잡~~ → ✅ 완료 (2026-07-07)
 
-ADR-0006 교훈 — 핀 고정 이미지 전수의 `linux/arm64` manifest 존재를 CI에서 검증 (Docker Hub manifest 조회). Harbor 재발 방지.
+ADR-0006 교훈 코드화. `validate.yaml`에 `arm64-manifest` 잡 추가: 우리가 helm-values에서 명시적으로 핀한 이미지 3종(`bitnamilegacy/keycloak`·`postgresql`·`os-shell`)을 `docker buildx imagetools inspect`로 조회해 `linux/arm64` manifest 부재 시 빌드 실패. 차트 기본 이미지는 범위 밖(우리 핀만 대상). required 체크로 승격 — advisory면 arm64 없는 핀을 빨간 X 무시하고 머지 가능해 가드 목적이 무력화되고, Docker Hub는 이미 `helm template` 잡의 필수 의존성이라 flakiness 증분이 한계적이기 때문. 첫 실행에서 3종 전부 amd64+arm64 멀티아치 확인.
 
 ### ~~백로그: main 브랜치 보호~~ → ✅ 완료 (2026-07-07)
 
