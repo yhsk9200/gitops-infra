@@ -242,9 +242,9 @@ kubeseal --fetch-cert \
 
 ### Backup/Restore
 
-단일 노드 = 단일 장애점이므로 백업이 유일한 복원 수단입니다. 1차 정책은 로컬 백업 세트 생성, checksum/manifest 검증, 클러스터와 분리된 저장소(NAS)로의 수동 반출입니다. 자동화는 수동 절차 리허설 성공 후 검토합니다.
+단일 노드 = 단일 장애점이므로 백업이 유일한 복원 수단입니다. Harbor 제거([ADR-0006](docs/adr/0006-remove-harbor-registry-off-cluster.md)) 후 백업 표면을 재정의한 결과, 재구성 불가능한 stateful 자산은 **`keycloak_db` 하나**로 좁혀집니다(GitOps·SealedSecret은 GitHub, 평문은 비밀번호 관리자로 reseal, product-pulse는 무상태). 루틴 백업은 `scripts/platform-backup.sh`로 스크립트화(keycloak_db dump + GitOps commit + manifest + checksum, 클러스터에 read-only)했고, 최고 민감 파일인 sealed-secrets 컨트롤러 키는 루틴에서 빼 옵션·암호화 단계로 격리했습니다. NAS 수동 반출과 복구는 사람이 이해·반복하는 절차로 유지합니다.
 
-- `docs/platform-backup-restore-runbook.md`
+- `scripts/platform-backup.sh` · `docs/platform-backup-restore-runbook.md`
 
 ## 10. 현재 상태와 로드맵
 
@@ -270,6 +270,6 @@ kubeseal --fetch-cert \
 
 1. ~~Grafana SSO 연동~~ → 완료 (Keycloak `platform` realm OIDC, PKCE, realm role → Grafana role 매핑)
 2. ~~첫 제품 테넌트 온보딩 (aporiax-pulse)~~ → 완료 (격리 AppProject·RBAC 경계, TypeScript 스택 — [ADR-0005](docs/adr/0005-iac-layering-and-repo-strategy.md) · [ADR-0007](docs/adr/0007-first-product-tenant-onboarding.md))
-3. Alertmanager receiver 연결 (알림 채널 확정 후)
-4. 백업 런북 개정(Harbor 제거 반영) + 절차 스크립트화 + 반출 리허설
+3. 백업 런북 개정(Harbor 제거 반영, `keycloak_db` 중심 재스코핑) + 절차 스크립트화 → **완료**, **반출·복구 리허설(수동)** 잔여
+4. Alertmanager receiver 연결 (알림 채널 확정 후)
 5. AI 모델 시뮬레이터 플랫폼 (MLflow + MinIO, 별도 레포 — ADR-0001)
