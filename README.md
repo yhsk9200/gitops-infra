@@ -6,6 +6,9 @@ OCI Always Free 단일 노드(Ampere A1, 2 OCPU / 12GB) k3s 위에 플랫폼 공
 
 목표는 "많은 컴포넌트를 띄우는 것"이 아니라, **제약(무료 티어, 단일 노드, 단독 운영) 아래에서 무엇을 채택하고 무엇을 버렸는지**를 코드와 문서로 남기는 것입니다.
 
+> **🔴 라이브 데모 — [pulse.aporiax.duckdns.org](https://pulse.aporiax.duckdns.org)**
+> 이 플랫폼 위에 온보딩된 **첫 제품 테넌트**. 클러스터의 실시간 상태(Prometheus 메트릭 · ArgoCD 앱 인벤토리 · TLS 인증서 만료)를 노출하는 대시보드로, 플랫폼이 실제로 동작함을 그 자체로 증명합니다. 온보딩 판단과 격리 경계는 [ADR-0007](docs/adr/0007-first-product-tenant-onboarding.md).
+
 ## 1. 이 레포가 보여주는 것
 
 - **App of Apps + sync wave 의존성 설계** — 시크릿 컨트롤러 → 시크릿 → 스토리지 → DB → IAM → 관측성 순서를 wave로 강제
@@ -13,6 +16,7 @@ OCI Always Free 단일 노드(Ampere A1, 2 OCPU / 12GB) k3s 위에 플랫폼 공
 - **트레이드오프 의사결정 기록(ADR)** — 단일 노드 채택, 공용 Redis 제거 등 "왜"를 남김
 - **운영 런북** — 클러스터 재구축, 백업/복구, 클러스터 접근을 재현 가능한 절차로 문서화
 - **CI 검증 게이트** — push 전에 kubeconform + `helm template` 렌더링으로 매니페스트/values 검증
+- **제품 테넌트 온보딩(멀티테넌시 경계)** — 첫 제품(aporiax-pulse)을 격리된 AppProject·네임스페이스·RBAC 경계로 온보딩. 제품 코드는 별도 레포(수명주기 분리), 이 레포는 온보딩 매니페스트만 소유 ([ADR-0005](docs/adr/0005-iac-layering-and-repo-strategy.md) · [ADR-0007](docs/adr/0007-first-product-tenant-onboarding.md))
 
 ## 2. 핵심 의사결정 (ADR)
 
@@ -23,6 +27,8 @@ OCI Always Free 단일 노드(Ampere A1, 2 OCPU / 12GB) k3s 위에 플랫폼 공
 | **공용 Redis 제거** | 유일한 후보 소비자(Harbor)가 chart의 `lookup` 기반 `existingSecret` 제약으로 ArgoCD 렌더링과 비호환 — 빈 공용 컴포넌트를 유지하는 대신 제거 | [ADR-0003](docs/adr/0003-remove-shared-redis.md) |
 | **Harbor 제거 — 레지스트리 오프클러스터화** | 공식 이미지가 amd64 전용이라 Ampere(arm64) 노드에서 기동 불가 + 실수요(GHCR로 충분) 대비 최중량 컴포넌트 — 유지 대신 제거, self-hosted 필요 시 arm64 네이티브(zot) on-demand 재검토 | [ADR-0006](docs/adr/0006-remove-harbor-registry-off-cluster.md) |
 | **AI 시뮬레이터 플랫폼 방향** | MLflow + MinIO 조합, 이 레포가 아닌 별도 GitOps 단위로 분리 — Kubeflow는 요구가 명확해질 때까지 보류 | [ADR-0001](docs/adr/0001-ai-model-simulator-platform.md) |
+| **IaC 레이어링 + 레포 전략** | 프로비저닝→설정→배포 3레이어를 한 모노레포의 형제 디렉토리로, 단 **제품 경계는 별도 레포**로 분리 — 단독·단일 클러스터에서 멀티레포 인지비용은 정당화되지 않지만 제품은 수명주기가 다름 | [ADR-0005](docs/adr/0005-iac-layering-and-repo-strategy.md) |
+| **첫 제품 테넌트 온보딩(권한 경계)** | 제품 레포에 **중첩 App-of-Apps를 두지 않음** — AppProject의 `namespaceResourceWhitelist`는 프로젝트 전역이라, 테넌트 Application이 또 다른 Application을 생성할 수 있으면 경계를 이탈할 수 있음. 플랫폼 App-of-Apps의 평면 리프로 유지. 언어는 Go 관성 대신 TypeScript(웹 개발자 배경의 정직한 TL 판단) | [ADR-0007](docs/adr/0007-first-product-tenant-onboarding.md) |
 
 ADR 외에 values 주석으로 남긴 결정들:
 
@@ -97,7 +103,12 @@ platform-root-infra
     ├── platform-db-postgres
     ├── platform-iam-keycloak
     ├── platform-monitoring-prometheus
-    └── platform-monitoring-rules
+    ├── platform-monitoring-rules
+    │
+    │   # 제품 테넌트 온보딩 (ADR-0007) — 격리된 AppProject 하의 평면 리프
+    ├── appproject-product-pulse       ← 테넌트 전용 AppProject (권한 경계)
+    ├── platform-system-tenant-rbac    ← 테넌트 SA에 ArgoCD 앱 read 권한 부여 (플랫폼 소유 경계 통과)
+    └── product-pulse-web              ← 제품 앱(aporiax-pulse 레포) 리프 Application
 
 apps-ondemand/                     ← root 스캔 제외, 필요 시 kubectl apply (ADR-0004)
     ├── platform-monitoring-loki
@@ -119,6 +130,8 @@ apps-ondemand/                     ← root 스캔 제외, 필요 시 kubectl ap
 | `5` | `platform-monitoring-rules` | 알림 룰 |
 
 > 로그 스택(`platform-monitoring-loki`, `platform-monitoring-alloy`)은 `apps-ondemand/`로 분리된 **on-demand** 컴포넌트입니다. root가 자동 배포하지 않으며, 필요할 때 `kubectl apply -f apps-ondemand/`로 띄웁니다 ([ADR-0004](docs/adr/0004-refit-platform-for-12gb-free-tier.md)).
+>
+> **제품 테넌트**(`appproject-product-pulse` wave -10, `platform-system-tenant-rbac` wave 1, `product-pulse-web` wave 5)는 위 플랫폼 컴포넌트와 같은 `apps/`에 있지만 **별도 AppProject로 권한이 격리**됩니다 — 플랫폼 자원에는 접근할 수 없고 자기 네임스페이스(`product-pulse`)에만 배포합니다 ([ADR-0007](docs/adr/0007-first-product-tenant-onboarding.md)).
 
 ### 네임스페이스
 
@@ -129,6 +142,7 @@ apps-ondemand/                     ← root 스캔 제외, 필요 시 kubectl ap
 | `platform-iam` | Keycloak |
 | `platform-monitoring` | Prometheus, Grafana (Loki/Alloy는 on-demand) |
 | `cert-manager` | cert-manager controller |
+| `product-pulse` | 제품 테넌트 aporiax-pulse (플랫폼과 권한 격리, ADR-0007) |
 
 ## 5. 디렉토리 구조
 
@@ -151,7 +165,7 @@ gitops-infra/
 │   ├── monitoring/
 │   └── system/
 └── docs/
-    ├── adr/                   ← 의사결정 기록 (0001~0006)
+    ├── adr/                   ← 의사결정 기록 (0001~0007)
     ├── cluster-rebuild-runbook.md
     ├── platform-backup-restore-runbook.md
     └── ...
@@ -234,11 +248,28 @@ kubeseal --fetch-cert \
 
 ## 10. 현재 상태와 로드맵
 
-**현재 상태**: 단일 노드 재구축 **완료** (2026-07-02, 런북 검증 체크리스트 통과). 노드 `144.24.81.104`(reserved public IP, k3s v1.32.13, arm64)에서 전 애플리케이션 Synced/Healthy로 가동 중입니다. cert-manager(Let's Encrypt) 기반 TLS로 Grafana(`aporiax.duckdns.org`)와 Keycloak(`aporiax-auth.duckdns.org`)이 외부 노출되어 있고, ArgoCD·Prometheus 등 컨트롤 플레인성 UI는 의도적으로 SSH 터널 전용입니다. 설계는 Always Free worst-case(2 OCPU/12GB, [ADR-0004](docs/adr/0004-refit-platform-for-12gb-free-tier.md)) 기준의 lean 상시 + on-demand 구조를 유지합니다. 재구축 과정에서 발견된 아키텍처 제약으로 Harbor를 제거하고 레지스트리를 오프클러스터화했습니다 ([ADR-0006](docs/adr/0006-remove-harbor-registry-off-cluster.md)).
+**현재 상태**: 단일 노드 재구축 **완료** (2026-07-02, 런북 검증 체크리스트 통과). 노드 `144.24.81.104`(reserved public IP, k3s v1.32.13, arm64)에서 전 애플리케이션 Synced/Healthy로 가동 중입니다. cert-manager(Let's Encrypt) 기반 TLS로 Grafana(`aporiax.duckdns.org`)와 Keycloak(`aporiax-auth.duckdns.org`)이 외부 노출되어 있고, ArgoCD·Prometheus 등 컨트롤 플레인성 UI는 의도적으로 SSH 터널 전용입니다. 설계는 Always Free worst-case(2 OCPU/12GB, [ADR-0004](docs/adr/0004-refit-platform-for-12gb-free-tier.md)) 기준의 lean 상시 + on-demand 구조를 유지합니다. 재구축 과정에서 발견된 아키텍처 제약으로 Harbor를 제거하고 레지스트리를 오프클러스터화했습니다 ([ADR-0006](docs/adr/0006-remove-harbor-registry-off-cluster.md)). 가장 최근에는 이 플랫폼 위에 **첫 제품 테넌트(aporiax-pulse)를 온보딩**해 라이브로 가동 중입니다(아래).
+
+### 첫 제품 테넌트: aporiax-pulse
+
+플랫폼이 실제로 제품을 호스팅할 수 있음을 보이는 첫 온보딩입니다. **라이브: [pulse.aporiax.duckdns.org](https://pulse.aporiax.duckdns.org)** (cert-manager/Let's Encrypt TLS).
+
+- **무엇** — 클러스터의 실시간 상태를 한 화면에 노출하는 대시보드: 노드 메트릭(Prometheus), ArgoCD Application 인벤토리(in-cluster ServiceAccount로 k8s API read), 플랫폼 도메인들의 TLS 인증서 만료일. 즉, 플랫폼이 살아있음을 스스로 증명하는 관측 창.
+- **어떻게 격리했나** — 제품은 전용 AppProject·네임스페이스(`product-pulse`)로 온보딩되어 플랫폼 자원에 접근할 수 없습니다. ArgoCD 앱 목록을 읽는 권한만 플랫폼이 소유한 Role로 명시적으로 부여합니다. 제품 레포에 **중첩 App-of-Apps를 두지 않은** 이유(AppProject 화이트리스트의 프로젝트 전역성 → 권한 이탈 위험)는 [ADR-0007](docs/adr/0007-first-product-tenant-onboarding.md).
+- **왜 별도 레포** — 제품 코드([aporiax-pulse](https://github.com/yhsk9200/aporiax-pulse))는 다른 수명주기·소유권이라 별도 GitOps 단위입니다. 이 레포는 온보딩 매니페스트(AppProject·네임스페이스·RBAC·리프 Application)만 소유합니다 ([ADR-0005](docs/adr/0005-iac-layering-and-repo-strategy.md)).
+- **언어 선택** — DevOps 관성의 Go 대신 TypeScript/Next.js. 순수 웹 개발자 배경에서 TL 관점의 언어 판단을 더 정직하게 보여준다는 이유 ([ADR-0007](docs/adr/0007-first-product-tenant-onboarding.md)).
+
+> 📸 **스크린샷**(추가 예정): ArgoCD 앱 트리(전 앱 Synced/Healthy) · pulse 라이브 대시보드. 이미지를 `docs/images/`에 넣고 아래 주석을 해제하세요.
+
+<!--
+![ArgoCD 앱 트리](docs/images/argocd-app-tree.png)
+![aporiax-pulse 라이브 대시보드](docs/images/pulse-dashboard.png)
+-->
 
 로드맵 (우선순위 순):
 
 1. ~~Grafana SSO 연동~~ → 완료 (Keycloak `platform` realm OIDC, PKCE, realm role → Grafana role 매핑)
-2. Alertmanager receiver 연결 (알림 채널 확정 후)
-3. 백업 런북 개정(Harbor 제거 반영) + 절차 스크립트화 + 반출 리허설
-4. AI 모델 시뮬레이터 플랫폼 (MLflow + MinIO, 별도 레포 — ADR-0001)
+2. ~~첫 제품 테넌트 온보딩 (aporiax-pulse)~~ → 완료 (격리 AppProject·RBAC 경계, TypeScript 스택 — [ADR-0005](docs/adr/0005-iac-layering-and-repo-strategy.md) · [ADR-0007](docs/adr/0007-first-product-tenant-onboarding.md))
+3. Alertmanager receiver 연결 (알림 채널 확정 후)
+4. 백업 런북 개정(Harbor 제거 반영) + 절차 스크립트화 + 반출 리허설
+5. AI 모델 시뮬레이터 플랫폼 (MLflow + MinIO, 별도 레포 — ADR-0001)
