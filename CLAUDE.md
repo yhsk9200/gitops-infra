@@ -67,7 +67,7 @@ OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of
 | Bitnami | 차트 `registry-1.docker.io/bitnamicharts` (**스킴 없는 repoURL — `oci://`는 ArgoCD 3.x에서 401**, 런북 3.2 주의), 이미지 `bitnamilegacy` 핀 (postgres `17.6.0`, keycloak `26.3.3`, os-shell `12-debian-12-r51` — 전부 arm64 확인됨). sealed-secrets 차트는 `bitnami.github.io/sealed-secrets`(구 bitnami-labs 호스트는 404) |
 | 공용 Redis | 제거됨 (ADR-0003) — 이후 Harbor 자체도 ADR-0006으로 제거 |
 | Alerting | v1 PrometheusRule 가동 중 (`platform-monitoring-rules`, wave 5) — receiver는 채널 확정 후 |
-| CI | `validate.yaml` — kubeconform + helm template 7종. PR #1~#13 전부 CI 통과 후 머지 (**단 브랜치 보호 미설정** — 체크 등록 전 머지가 물리적으로 가능함이 PR #8에서 실증됨, 백로그 참조) |
+| CI | `validate.yaml` — kubeconform + helm template 7종. **브랜치 보호 설정 완료** (2026-07-07): main은 PR 필수 + required status checks(`kubeconform (raw manifests)`·`helm template (pinned charts x values)`) + admin 우회 불가 + force-push/삭제 금지. required 데드락 방지를 위해 `pull_request` paths 필터 제거 → 모든 PR에서 validate 실행. pulse 레포도 동일 보호(required: `lint-typecheck-build`·`validate-manifests`) |
 | gh CLI | **인증 완료** (2026-07-03, yhsk9200) — PR 생성·CI 확인·머지까지 CLI로 가능 (`gh pr create` → `gh pr checks --watch` → `gh pr merge --squash --delete-branch`) |
 
 ## 다음 작업 — 우선순위 순
@@ -98,9 +98,9 @@ OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of
 
 ADR-0006 교훈 — 핀 고정 이미지 전수의 `linux/arm64` manifest 존재를 CI에서 검증 (Docker Hub manifest 조회). Harbor 재발 방지.
 
-### 백로그: main 브랜치 보호 (required status checks)
+### ~~백로그: main 브랜치 보호~~ → ✅ 완료 (2026-07-07)
 
-PR #8에서 CI 체크가 등록되기 전에 `gh pr merge`가 통과해버리는 갭 실증. GitHub 브랜치 보호에서 validate 2종을 required로 지정하면 닫힘 — "PR이 유일한 사전 안전장치"라는 전략의 마지막 구멍.
+PR #8에서 CI 체크 등록 전 `gh pr merge` 통과 갭을 실증했던 "전략의 마지막 구멍"을 닫음. 두 레포(gitops-infra·aporiax-pulse) main에 브랜치 보호 적용: PR 필수(승인 0 — 단독 운영이라 셀프 승인 불가로 데드락 방지) + required status checks + `enforce_admins`(소유자도 우회 불가) + force-push/삭제 금지. GitHub "required + paths 필터" 데드락을 피하려 `validate.yaml`의 `pull_request` paths 필터 제거(docs/ADR/CLAUDE.md-only PR도 이제 검증됨).
 
 ### 장기: AI 모델 시뮬레이터 플랫폼
 
