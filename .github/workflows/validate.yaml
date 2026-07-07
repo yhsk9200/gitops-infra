@@ -76,3 +76,40 @@ jobs:
           render platform-monitoring-prometheus kube-prometheus-stack 83.6.0 helm-values/monitoring/kube-prometheus-stack-values.yaml -n platform-monitoring --repo https://prometheus-community.github.io/helm-charts
           render platform-monitoring-loki loki 6.46.0 helm-values/monitoring/loki-values.yaml -n platform-monitoring --repo https://grafana.github.io/helm-charts
           render platform-monitoring-alloy alloy 1.7.0 helm-values/monitoring/alloy-values.yaml -n platform-monitoring --repo https://grafana.github.io/helm-charts
+
+  arm64-manifest:
+    name: arm64 manifest (pinned images)
+    runs-on: ubuntu-latest
+    steps:
+      # ADR-0006 regression guard: goharbor shipped amd64-only and could not
+      # start on the arm64 node — the mismatch surfaced only at deploy time.
+      # Every image we explicitly pin in helm-values/ must expose a
+      # linux/arm64 manifest. Keep this list in sync with the image.tag
+      # values in helm-values/ (change both in the same PR when a pin moves).
+      - name: Assert linux/arm64 for every pinned image
+        run: |
+          set -uo pipefail
+          IMAGES=(
+            "docker.io/bitnamilegacy/keycloak:26.3.3-debian-12-r0"     # helm-values/iam/keycloak-values-{prod,dev}.yaml
+            "docker.io/bitnamilegacy/postgresql:17.6.0-debian-12-r4"   # helm-values/database/postgres-values.yaml
+            "docker.io/bitnamilegacy/os-shell:12-debian-12-r51"        # helm-values/database/postgres-values.yaml (init/metrics)
+          )
+          fail=0
+          for img in "${IMAGES[@]}"; do
+            echo "::group::${img}"
+            if inspect=$(docker buildx imagetools inspect "$img" 2>&1); then
+              echo "$inspect"
+              if grep -q "linux/arm64" <<<"$inspect"; then
+                echo "OK: linux/arm64 present"
+              else
+                echo "::error::${img} has no linux/arm64 manifest"
+                fail=1
+              fi
+            else
+              echo "$inspect"
+              echo "::error::failed to inspect ${img}"
+              fail=1
+            fi
+            echo "::endgroup::"
+          done
+          exit "$fail"
