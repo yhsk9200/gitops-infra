@@ -3,14 +3,12 @@ name: validate
 on:
   push:
     branches: [main]
+  # No paths filter: these jobs are required status checks on main (branch
+  # protection). A path-filtered PR (e.g. docs/ADR/CLAUDE.md only) would skip
+  # the workflow, leaving the required contexts perpetually pending and
+  # blocking the merge — the classic GitHub "required + path filter" deadlock.
+  # Running validate on every PR (~2 min) is the cost of making it a gate.
   pull_request:
-    paths:
-      - "apps/**"
-      - "apps-ondemand/**"
-      - "bootstrap/**"
-      - "manifests/**"
-      - "helm-values/**"
-      - ".github/workflows/validate.yaml"
 
 env:
   KUBECONFORM_VERSION: v0.6.7
