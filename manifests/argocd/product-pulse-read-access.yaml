@@ -1,0 +1,28 @@
+# Deliberate boundary-crossing grant, owned and reviewed on the platform side —
+# the product-pulse AppProject's destinations do NOT include the argocd
+# namespace, so the tenant repo cannot request or modify this itself.
+# Read-only: lets the dashboard's ServiceAccount list Application status via
+# the standard k8s API (no separate ArgoCD account/token to provision).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: product-pulse-argocd-read
+  namespace: argocd
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: product-pulse-argocd-read
+  namespace: argocd
+subjects:
+  - kind: ServiceAccount
+    name: product-pulse-web
+    namespace: product-pulse
+roleRef:
+  kind: Role
+  name: product-pulse-argocd-read
+  apiGroup: rbac.authorization.k8s.io
