@@ -82,9 +82,9 @@ OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of
 
 `docs/platform-alerting-todo.md` — v1 rule은 가동 중. 채널(Email/Slack 등) 확정 → receiver/route 설정 → firing 검증.
 
-### 작업 2: 백업 런북 전면 개정 + 스크립트화
+### 작업 2: 백업 런북 전면 개정 + 스크립트화 — 문서·스크립트 ✅ 완료 (2026-07-07), 리허설 잔여
 
-`docs/platform-backup-restore-runbook.md` — Harbor 제거(ADR-0006)로 문서 상단에 무효 표기된 상태. 백업 대상을 postgres(keycloak_db)·SealedSecret 원본·컨트롤러 키 기준으로 재정의 → 스크립트화 + 반출 리허설.
+`docs/platform-backup-restore-runbook.md` 전면 재작성(PR #21) — Harbor 절차 전량 삭제, 구 IP 제거. **핵심 판단**: Harbor 제거로 재구성 불가능한 stateful 자산은 `keycloak_db` 하나로 좁혀짐(GitOps·SealedSecret=GitHub, 평문=비번관리자 reseal 경로, product-pulse=무상태). 컨트롤러 키는 최고위험 파일이라 루틴 백업에서 빼 **옵션·암호화·수동** 단계로 격리(원본보다 나은 노출 표면). 루틴은 `scripts/platform-backup.sh`로 스크립트화(keycloak_db dump→pg_restore --list 검증→GitOps commit→manifest→checksum→retention, 클러스터 read-only, bash -n 통과). **잔여(수동/SSH)**: k3s 서버에서 스크립트 실행 + 임시 DB로 pg_restore 리허설("복구 테스트 안 한 백업은 신뢰 불가") + NAS 반출 리허설.
 
 ### 작업 3: 도메인/TLS → Grafana SSO — ✅ 배포 완료 (2026-07-06)
 
@@ -123,12 +123,13 @@ docs/
   cluster-access-kubeconfig.md    ← SSH 터널 접근 가이드 (노드 144.24.81.104 기준)
   platform-alerting-todo.md       ← receiver 연결 TODO (rule은 완료)
   platform-observability-checklist.md
-  platform-backup-restore-runbook.md  ← ⚠️ Harbor 절차 무효 — 작업 2에서 전면 개정
+  platform-backup-restore-runbook.md  ← 전면 개정 완료 (keycloak_db 중심, scripts/platform-backup.sh)
   keycloak-operations.md / keycloak-rbac-plan.md / keycloak-manual-rbac-checklist.md
-apps/                              ← ArgoCD Application 11개 + AppProject 1개 (root 자동 동기화, 상시)
+apps/                              ← ArgoCD Application 13개 + AppProject 2개 (platform-infra + product-pulse 테넌트, root 자동 동기화, 상시)
 apps-ondemand/                     ← on-demand Application (loki, alloy — ADR-0004)
 helm-values/                       ← 컴포넌트별 Helm values (트레이드오프 주석 포함)
 manifests/                         ← 네임스페이스, SealedSecret, 스토리지, PrometheusRule, ClusterIssuer, Traefik HelmChartConfig
+scripts/                           ← 운영 스크립트 (platform-backup.sh — keycloak_db 루틴 백업, 클러스터 read-only)
 bootstrap/platform-root-infra.yaml ← 최초 부트스트랩 진입점
 ```
 
