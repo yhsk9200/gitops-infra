@@ -26,7 +26,7 @@ OCI Always Free 단일 노드(Ampere A1, 2 OCPU / 12GB) k3s 위에 플랫폼 공
 | **12GB 리핏 (free-tier 반감 대응)** | Always Free가 4 OCPU/24GB→2 OCPU/12GB로 축소 — capability를 영구 삭제하지 않고 lean 상시(메트릭)+on-demand(로그/Trivy)로 right-sizing | [ADR-0004](docs/adr/0004-refit-platform-for-12gb-free-tier.md) |
 | **공용 Redis 제거** | 유일한 후보 소비자(Harbor)가 chart의 `lookup` 기반 `existingSecret` 제약으로 ArgoCD 렌더링과 비호환 — 빈 공용 컴포넌트를 유지하는 대신 제거 | [ADR-0003](docs/adr/0003-remove-shared-redis.md) |
 | **Harbor 제거 — 레지스트리 오프클러스터화** | 공식 이미지가 amd64 전용이라 Ampere(arm64) 노드에서 기동 불가 + 실수요(GHCR로 충분) 대비 최중량 컴포넌트 — 유지 대신 제거, self-hosted 필요 시 arm64 네이티브(zot) on-demand 재검토 | [ADR-0006](docs/adr/0006-remove-harbor-registry-off-cluster.md) |
-| **AI 시뮬레이터 플랫폼 방향** | MLflow + MinIO 조합, 이 레포가 아닌 별도 GitOps 단위로 분리 — Kubeflow는 요구가 명확해질 때까지 보류 | [ADR-0001](docs/adr/0001-ai-model-simulator-platform.md) |
+| **MLOps 플랫폼 피봇 (시뮬레이터 대체)** | 모델 승격을 **이미지 베이킹 PR**로 — 모델 배포가 코드 배포와 동일한 감사·롤백 경로를 갖고, 서빙이 아티팩트 스토어에서 런타임 디커플링됨. 아티팩트는 무료 티어 정책 변동(2026-06-15 무통보 반토막 실증) 대신 보유 NAS(MinIO, tailnet 전용)에 | [ADR-0008](docs/adr/0008-mlops-platform-pivot.md) (0001 대체) |
 | **IaC 레이어링 + 레포 전략** | 프로비저닝→설정→배포 3레이어를 한 모노레포의 형제 디렉토리로, 단 **제품 경계는 별도 레포**로 분리 — 단독·단일 클러스터에서 멀티레포 인지비용은 정당화되지 않지만 제품은 수명주기가 다름 | [ADR-0005](docs/adr/0005-iac-layering-and-repo-strategy.md) |
 | **첫 제품 테넌트 온보딩(권한 경계)** | 제품 레포에 **중첩 App-of-Apps를 두지 않음** — AppProject의 `namespaceResourceWhitelist`는 프로젝트 전역이라, 테넌트 Application이 또 다른 Application을 생성할 수 있으면 경계를 이탈할 수 있음. 플랫폼 App-of-Apps의 평면 리프로 유지. 언어는 Go 관성 대신 TypeScript(웹 개발자 배경의 정직한 TL 판단) | [ADR-0007](docs/adr/0007-first-product-tenant-onboarding.md) |
 
@@ -165,7 +165,7 @@ gitops-infra/
 │   ├── monitoring/
 │   └── system/
 └── docs/
-    ├── adr/                   ← 의사결정 기록 (0001~0007)
+    ├── adr/                   ← 의사결정 기록 (0001~0008)
     ├── cluster-rebuild-runbook.md
     ├── platform-backup-restore-runbook.md
     └── ...
@@ -271,5 +271,5 @@ kubeseal --fetch-cert \
 1. ~~Grafana SSO 연동~~ → 완료 (Keycloak `platform` realm OIDC, PKCE, realm role → Grafana role 매핑)
 2. ~~첫 제품 테넌트 온보딩 (aporiax-pulse)~~ → 완료 (격리 AppProject·RBAC 경계, TypeScript 스택 — [ADR-0005](docs/adr/0005-iac-layering-and-repo-strategy.md) · [ADR-0007](docs/adr/0007-first-product-tenant-onboarding.md))
 3. 백업 런북 개정(Harbor 제거 반영, `keycloak_db` 중심 재스코핑) + 절차 스크립트화 → **완료**, **반출·복구 리허설(수동)** 잔여
-4. Alertmanager receiver 연결 (알림 채널 확정 후)
-5. AI 모델 시뮬레이터 플랫폼 (MLflow + MinIO, 별도 레포 — ADR-0001)
+4. ~~Alertmanager receiver 연결~~ → 완료 (Telegram — 봇 토큰 SealedSecret 격리, synthetic alert로 firing/resolved 실수신 검증)
+5. MLOps 플랫폼 (MLflow + MinIO@NAS, 공용 서비스는 이 레포·ML 제품은 테넌트 레포 — [ADR-0008](docs/adr/0008-mlops-platform-pivot.md)): Tailscale/NAS 준비 → MLflow → 학습 CronJob → 이미지 베이킹 서빙 → 드리프트 알림

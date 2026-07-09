@@ -7,7 +7,7 @@
 OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of Apps로 배포·운영하는 **개인 포트폴리오 GitOps 레포**입니다. 전체 구조·컴포넌트·로드맵은 `README.md`가 단일 기준입니다.
 
 - **원격**: `origin` → `git@github.com:yhsk9200/gitops-infra.git` (단일 원격)
-- 포폴 핵심 가치: 제약(무료 티어·단일 노드·단독 운영) 하의 트레이드오프 기록 (ADR 0001~0006)
+- 포폴 핵심 가치: 제약(무료 티어·단일 노드·단독 운영) 하의 트레이드오프 기록 (ADR 0001~0008)
 - **자원 전제**: 설계는 worst-case **2 OCPU / 12GB**(ADR-0004) 기준. 실제 발급 노드는 grandfather로 **4 OCPU / 24GB 실측**(2026-07-02). **정책 확정됨**(2026-07-10 확인): Oracle이 2026-06-15부로 A1 무료 한도를 2/12로 반토막(무통보, 문서만 변경). 기존 4/24 노드는 회색지대(Always Free 계정 초과분은 향후 중지 가능, 삭제는 아님)이고 **terminate 시 상위 사양 재생성 불가 명시** → re-fatten은 영구 기각, 12GB 리핏 유지가 유일한 안전 설계. 어느 shape가 와도 같은 레포로 재배포 가능
 
 ## 레포 전략 (구조·관리)
@@ -102,9 +102,11 @@ ADR-0006 교훈 코드화. `validate.yaml`에 `arm64-manifest` 잡 추가: 우�
 
 PR #8에서 CI 체크 등록 전 `gh pr merge` 통과 갭을 실증했던 "전략의 마지막 구멍"을 닫음. 두 레포(gitops-infra·aporiax-pulse) main에 브랜치 보호 적용: PR 필수(승인 0 — 단독 운영이라 셀프 승인 불가로 데드락 방지) + required status checks + `enforce_admins`(소유자도 우회 불가) + force-push/삭제 금지. GitHub "required + paths 필터" 데드락을 피하려 `validate.yaml`의 `pull_request` paths 필터 제거(docs/ADR/CLAUDE.md-only PR도 이제 검증됨).
 
-### 장기: AI 모델 시뮬레이터 플랫폼
+### 장기: MLOps 플랫폼 — ADR-0008로 방향 확정 (2026-07-10)
 
-ADR-0001 — MLflow + MinIO, 별도 레포로 분리. 미착수.
+시뮬레이터(ADR-0001)를 **MLOps 라이프사이클로 피봇** — ADR-0008이 0001을 대체. 핵심 결정: ① 공용 서비스(MLflow)는 이 레포 `platform-mlops-*`, ML 제품(학습/서빙)은 pulse 패턴의 별도 테넌트 레포 ② 아티팩트는 **MinIO@NAS(DS920+, tailnet 전용 바인딩)** — OCI Object Storage는 무료 유지 확인됐으나(20GB+월 5만 req) 2026-06-15 무통보 반토막 전례로 기각 ③ **모델 승격 = 이미지 베이킹 PR**(main=배포 불변식을 모델에도 적용, 서빙-NAS 런타임 디커플링) ④ v1 오케스트레이션은 CronJob(Argo WF·Kubeflow는 조건부 보류), MLflow UI 비노출 ⑤ 첫 유스케이스: 클러스터 자기 텔레메트리 예측. arm64 선검증 완료(mlflow v3.6.0·oauth2-proxy v7.13.0, 2026-07-10). 모델 라우팅: 스펙 확정·검증=Fable, 매니페스트/코드 실행=Sonnet.
+
+**다음 착수점 = Phase A (수동 몫 큼)**: Tailscale tailnet에 노드+NAS 편입 → NAS에 MinIO 기동·버킷 생성 → 클러스터에서 tailnet 경유 S3 접근 실측. 이때 kubeconfig 방식 C(tailnet) 전환 동반(`cluster-access-kubeconfig.md`). Phase B부터 GitOps 작업(MLflow 배포, mlflow_db, 백업 확장).
 
 ## 주요 파일 맵
 
@@ -120,6 +122,8 @@ docs/
   adr/0004-refit-platform-for-12gb-free-tier.md
   adr/0005-iac-layering-and-repo-strategy.md  ← IaC 3레이어 + 모노레포 전략
   adr/0006-remove-harbor-registry-off-cluster.md  ← Harbor 제거 (arm64 제약 + GHCR)
+  adr/0007-first-product-tenant-onboarding.md  ← 첫 제품 테넌트 (pulse) 경계 패턴
+  adr/0008-mlops-platform-pivot.md  ← MLOps 피봇 (0001 대체 — MinIO@NAS, 이미지 베이킹 승격)
   cluster-access-kubeconfig.md    ← SSH 터널 접근 가이드 (노드 144.24.81.104 기준)
   platform-alerting-todo.md       ← rule + receiver 연결 완료 (Telegram), 남은 건 노이즈 조정
   platform-observability-checklist.md
