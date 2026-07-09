@@ -145,6 +145,42 @@ alertmanager:
         cpu: 200m
         memory: 256Mi
 
+    # 텔레그램 봇 토큰(SealedSecret alertmanager-telegram-token)을 파드에
+    # /etc/alertmanager/secrets/alertmanager-telegram-token/token 으로 마운트.
+    # 토큰 자체는 git에 없고 이 파일 경로만 config가 참조한다(bot_token_file).
+    secrets:
+      - alertmanager-telegram-token
+
+  # Helm은 values를 맵 단위로 병합하므로 route/receivers만 지정하면 그 두 키만
+  # 차트 기본값을 대체하고, 여기서 안 건드린 inhibit_rules(critical이 같은
+  # namespace+alertname의 warning/info를 억제)·templates는 차트 기본값이 그대로
+  # 살아있다 — 직접 재작성할 필요 없음(차트 기본 확인: kube-prometheus-stack
+  # 83.6.0 values.yaml).
+  # chat_id는 토큰 없이는 무의미한 숫자라 git 평문으로 둬도 안전 — 비밀은
+  # 토큰 파일 하나로 격리했다.
+  # Watchdog은 파이프라인 생존 확인용 상시 firing 메타 알림이라 텔레그램으로
+  # 보내면 repeat_interval마다 영구 노이즈가 된다 → null 라우팅으로 명시 유지.
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: telegram-platform
+      group_by: ['alertname', 'namespace']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      routes:
+        - receiver: 'null'
+          matchers:
+            - alertname = "Watchdog"
+    receivers:
+      - name: 'null'
+      - name: telegram-platform
+        telegram_configs:
+          - bot_token_file: /etc/alertmanager/secrets/alertmanager-telegram-token/token
+            chat_id: 5414451219
+            send_resolved: true
+
 # admission webhook TLS를 helm hook Job(create/patch) 대신 cert-manager로 발급.
 # hook 방식은 SA/RBAC에 pre+post 훅 4종이 달려 ArgoCD 훅 엔진이 완료 판정을 못 하고
 # sync가 교착된다(2026-07-05 실측: Job Complete 후 SA hookPhase=Running 고착).
