@@ -1,13 +1,14 @@
 # Platform Alerting TODO
 
-이 문서는 Grafana/Prometheus/Alertmanager 기반 위험 탐지 작업을 나중에 진행하기 위한 TODO 목록입니다.
+이 문서는 Grafana/Prometheus/Alertmanager 기반 위험 탐지 작업의 진행 기록입니다.
 
 현재 상태:
 
 - Prometheus, Grafana, Alertmanager는 `kube-prometheus-stack`으로 배포되어 있습니다.
 - 기본 Prometheus rule은 일부 활성화되어 있습니다.
 - **v1 커스텀 `PrometheusRule`은 작성 완료** — `manifests/monitoring/rules/platform-rules.yaml` (`platform-monitoring-rules` 앱, wave 5).
-- Alertmanager 수신처와 알림 라우팅 정책은 아직 정의하지 않았습니다 (채널 미확정).
+- **rule 로딩 + firing 파이프라인 실측 완료** (2026-07-09, 클러스터 read-only 점검): `platform.availability`/`platform.capacity`/`platform.scrape` 3개 그룹 6개 룰 전부 Prometheus에 로딩됨(전부 `inactive` = 평상시 정상). 상시 firing 메타 알림인 `Watchdog`이 Alertmanager까지 전달되는 것을 확인 — Prometheus→Alertmanager 배선 자체가 검증됨(당시 receiver는 `null`).
+- **알림 채널 확정: Telegram** (2026-07-09). 봇 토큰은 SealedSecret(`manifests/security/alertmanager-telegram-sealed-secret.yaml`)으로 격리, receiver/route는 `helm-values/monitoring/kube-prometheus-stack-values.yaml`의 `alertmanager.config`로 배선.
 - Grafana Alerting provisioning은 아직 사용하지 않습니다.
 
 ## 권장 방향
@@ -28,11 +29,12 @@ Grafana Alerting은 로그 기반 탐지나 Grafana UI 중심 운영이 필요�
 - [x] `manifests/monitoring/rules/` 디렉토리 추가
 - [x] `platform-monitoring-rules` ArgoCD Application 추가
 - [x] v1 `PrometheusRule` 작성
-- [ ] Prometheus에서 rule 로딩 확인 (클러스터 재구축 후)
-- [ ] Alertmanager에서 firing alert 확인
-- [ ] 알림 채널 결정
-- [ ] Alertmanager receiver 및 route 설정
-- [ ] 노이즈가 많은 rule 조정
+- [x] Prometheus에서 rule 로딩 확인 (2026-07-09, 클러스터 재구축 후 실측)
+- [x] Alertmanager에서 firing alert 확인 (2026-07-09, Watchdog firing 실측)
+- [x] 알림 채널 결정 — Telegram
+- [x] Alertmanager receiver 및 route 설정 (`telegram-platform` receiver, Watchdog는 계속 `null`)
+- [ ] 실제 텔레그램 수신 검증 (synthetic alert 주입, 머지 직후 1회성)
+- [ ] 노이즈가 많은 rule 조정 (실제 firing 데이터 축적 후 판단)
 - [ ] 필요 시 Grafana Alerting provisioning 검토
 
 ## v1 Alert Rule 구성
@@ -52,29 +54,25 @@ Grafana Alerting은 로그 기반 탐지나 Grafana UI 중심 운영이 필요�
 
 > Loki/Alloy는 on-demand(`apps-ondemand/`, ADR-0004)라 평소엔 scrape 대상이 아닙니다. on-demand로 띄운 동안에만 위 룰의 포괄 범위에 들어옵니다.
 
-## 알림 채널 결정 필요
+## 알림 채널: Telegram (확정)
 
-아래 중 실제 운영 연락망에 맞는 방식을 선택해야 합니다.
+1인 운영 환경에서 폰 푸시가 가장 빠르고, 봇 토큰 하나만 SealedSecret으로 격리하면 되어
+Email(SMTP 자격증명)이나 Slack(워크스페이스 앱 등록)보다 설정 표면이 작다는 점을 근거로 선택했습니다.
 
-- Email
-- Slack
-- Mattermost
-- Teams
-- Webhook
-- SMS 또는 외부 관제 연동
+- 수신: 개인 1:1 채팅(chat_id 양수) — 그룹이 아님
+- 배선: `alertmanagerSpec.secrets`로 봇 토큰 파일 마운트 → `alertmanager.config`의
+  `telegram_configs.bot_token_file`이 참조. `chat_id`는 토큰 없이는 무의미한 값이라 git 평문.
+- Watchdog(상시 firing 메타 알림)은 텔레그램으로 보내면 `repeat_interval`마다 영구 노이즈가
+  되므로 계속 `null` receiver로 라우팅합니다.
+- inhibit_rule(같은 namespace+alertname의 critical이 warning/info를 억제)은 별도로 작성하지
+  않았습니다 — Helm이 values를 맵 단위로 병합해서 `route`/`receivers`만 지정하면 그 두 키만
+  차트 기본값을 대체하고, 건드리지 않은 `inhibit_rules`는 kube-prometheus-stack 차트 기본값이
+  그대로 살아있습니다(`helm template`로 렌더링해 실측 확인). 현재 v1 룰셋은 룰마다 severity가
+  고정 1개뿐이라 당장 억제될 대상은 없지만, 향후 같은 alertname이 여러 severity로 확장되면
+  차트 기본값이 자동으로 커버합니다.
 
-## receiver/route 보류 사유
+## receiver/route 시작 조건 — 충족 완료 (2026-07-09)
 
-rule은 작성했지만 notification route를 아직 추가하지 않는 이유:
-
-- 아직 실제 운영 알림 채널이 확정되지 않았습니다.
-- 채널 없이도 Prometheus rule 로딩과 Alertmanager firing은 검증할 수 있습니다.
-- receiver 없이 rule을 먼저 운영하며 노이즈가 많은 rule을 조정한 뒤 연결하는 편이 안전합니다.
-
-## receiver/route 시작 조건
-
-아래 조건이 충족되면 receiver 설정을 진행합니다.
-
-- 클러스터 재구축 후 주요 플랫폼 컴포넌트가 안정적으로 기동 중입니다.
-- v1 rule의 firing/해소 동작이 Alertmanager UI에서 확인되었습니다.
-- 알림을 받을 채널이 정해졌습니다.
+- [x] 클러스터 재구축 후 주요 플랫폼 컴포넌트가 안정적으로 기동 중입니다.
+- [x] v1 rule의 firing 동작이 Alertmanager에서 확인되었습니다(Watchdog).
+- [x] 알림을 받을 채널이 정해졌습니다(Telegram).
