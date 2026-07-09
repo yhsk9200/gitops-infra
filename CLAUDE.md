@@ -55,9 +55,9 @@ OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of
 
 | 항목 | 상태 |
 |---|---|
-| 클러스터 | **가동 중** — 노드 `144.24.81.104`(reserved public IP, 2026-07-03 전환. 구 IP `158.179.169.201`은 release됨) (4 OCPU/24GB arm64, k3s v1.32.13), ArgoCD v3.4.4, **앱 12/12 Synced/Healthy**, 상시 메모리 ~4.5Gi |
+| 클러스터 | **가동 중** — 노드 `144.24.81.104`(reserved public IP, 2026-07-03 전환. 구 IP `158.179.169.201`은 release됨) (4 OCPU/24GB arm64, k3s v1.32.13), ArgoCD v3.4.4, **앱 14/14 Synced/Healthy**(2026-07-09 실측), 상시 메모리 ~4.4Gi/24Gi(18%) |
 | Grafana 배포 전략 | **Recreate + initChownData 비활성** (PR #7~#11, 2026-07-05 인시던트): ① init-chown-data가 root여도 capabilities drop ALL이라 Grafana 자신이 만든 0700 디렉토리(png/pdf/csv)를 순회 못해 2번째 롤아웃부터 전부 교착 → init 비활성. ② RWO PVC+SQLite라 Recreate 전환 — 단 전이가 SSA(null 무시)·CSA(last-applied 부재) 모두로 불가, 1회성 `Replace=true`로 전이 후 SSA 복귀. ③ admission webhook TLS는 hook Job이 ArgoCD 훅 엔진과 교착해 **cert-manager 발급으로 전환** (`certManager.enabled: true`) |
-| HTTP 리다이렉트 | **전역 301 → HTTPS** (PR #12~#13): k3s 번들 Traefik을 GitOps 관리 `HelmChartConfig`(`manifests/traefik/`)로 오버라이드. 주의: 차트 39.x 스키마는 `ports.web.http.redirections`(http 단계 누락 시 조용히 무시됨) |
+| HTTP 리다이렉트 | **전역 HTTPS 강제** (PR #12~#13): k3s 번들 Traefik을 GitOps 관리 `HelmChartConfig`(`manifests/traefik/`)로 오버라이드. 주의: 차트 39.x 스키마는 `ports.web.http.redirections`(http 단계 누락 시 조용히 무시됨). 실측(2026-07-09)은 `308 Permanent Redirect`(Traefik 기본값 — 문서상 "301"은 표현일 뿐 기능은 동일) |
 | 도메인 | `aporiax.duckdns.org`(Grafana)·`aporiax-auth.duckdns.org`(Keycloak) → `144.24.81.104` (PSL 등재라 Let's Encrypt 발급 가능). OCI Security List 80/443 인바운드 개방 완료 — 노드 iptables는 별도 수정 불필요(k8s hostPort 트래픽은 FORWARD 체인을 타서 INPUT REJECT 룰 영향 밖) |
 | 외부 노출 | Grafana `https://aporiax.duckdns.org` (LE 인증서 확인 2026-07-03), Keycloak `https://aporiax-auth.duckdns.org` (prod values 전환). ArgoCD/Prometheus/Alertmanager는 **의도적 비노출** — SSH 터널 전용 |
 | 토폴로지 | **단일 노드** (ADR-0002), 설계 전제는 2/12 worst-case (ADR-0004) — 실측 4/24, re-fatten은 Oracle 정책 확정까지 보류 |
@@ -66,7 +66,7 @@ OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of
 | SealedSecret | 2026-07-02 새 키로 **reseal 완료** (4파일: postgres/keycloak-db/keycloak-admin/grafana). postgres-db-secret의 `harbor-password`는 고아 키(다음 reseal 때 제거). **reseal 평문은 비밀번호 관리자 이관 확인 후 로컬 임시본 삭제할 것** |
 | Bitnami | 차트 `registry-1.docker.io/bitnamicharts` (**스킴 없는 repoURL — `oci://`는 ArgoCD 3.x에서 401**, 런북 3.2 주의), 이미지 `bitnamilegacy` 핀 (postgres `17.6.0`, keycloak `26.3.3`, os-shell `12-debian-12-r51` — 전부 arm64 확인됨). sealed-secrets 차트는 `bitnami.github.io/sealed-secrets`(구 bitnami-labs 호스트는 404) |
 | 공용 Redis | 제거됨 (ADR-0003) — 이후 Harbor 자체도 ADR-0006으로 제거 |
-| Alerting | v1 PrometheusRule 가동 중 (`platform-monitoring-rules`, wave 5) — receiver는 채널 확정 후 |
+| Alerting | v1 PrometheusRule 가동 중 (`platform-monitoring-rules`, wave 5) + **Alertmanager receiver 연결 완료** (2026-07-09, PR #23): 채널 Telegram, 봇 토큰은 SealedSecret(`alertmanager-telegram-token`)으로 격리. synthetic alert로 firing/resolved 메시지 모두 실 수신 확인. Watchdog은 계속 `null` 라우팅(영구 firing이라 텔레그램 노이즈 방지) |
 | CI | `validate.yaml` — kubeconform + helm template 7종 + **arm64 manifest 가드**(핀 이미지 3종 `docker buildx imagetools inspect`, ADR-0006 재발 방지). **브랜치 보호 설정 완료** (2026-07-07): main은 PR 필수 + required status checks 3종(`kubeconform (raw manifests)`·`helm template (pinned charts x values)`·`arm64 manifest (pinned images)`) + admin 우회 불가 + force-push/삭제 금지. required 데드락 방지를 위해 `pull_request` paths 필터 제거 → 모든 PR에서 validate 실행. pulse 레포도 동일 보호(required: `lint-typecheck-build`·`validate-manifests`) |
 | gh CLI | **인증 완료** (2026-07-03, yhsk9200) — PR 생성·CI 확인·머지까지 CLI로 가능 (`gh pr create` → `gh pr checks --watch` → `gh pr merge --squash --delete-branch`) |
 
@@ -78,9 +78,9 @@ OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of
 - Grafana 실제 로그인 확인 (reseal 새 비밀번호) + Loki on-demand 선택 테스트
 - ArgoCD 앱 트리/Grafana **스크린샷을 README에 추가** — 포폴 증거 완성
 
-### 작업 1: Alertmanager receiver 연결
+### 작업 1: Alertmanager receiver 연결 — ✅ 완료 (2026-07-09)
 
-`docs/platform-alerting-todo.md` — v1 rule은 가동 중. 채널(Email/Slack 등) 확정 → receiver/route 설정 → firing 검증.
+`docs/platform-alerting-todo.md` — 채널은 Telegram으로 확정(1인 운영에서 폰 푸시가 가장 빠르고, 봇 토큰 하나만 격리하면 되어 Email/Slack보다 설정 표면이 작음). 봇 토큰은 SealedSecret(`manifests/security/alertmanager-telegram-sealed-secret.yaml`)으로 격리해 `alertmanagerSpec.secrets`로 마운트, `chat_id`는 토큰 없이는 무의미해 git 평문(PR #23). Helm이 values를 맵 단위로 병합하는 걸 로컬 `helm template`으로 실측 확인해 `route`/`receivers`만 지정하고 차트 기본 `inhibit_rules`(critical→warning/info 억제)는 그대로 살렸다. Watchdog(상시 firing 메타 알림)은 텔레그램 노이즈 방지를 위해 계속 `null` 라우팅. 머지 후 synthetic alert(`TelegramWireTest`)로 firing/resolved 메시지 실 수신까지 검증 완료 — v1 룰 6종은 아직 전부 inactive(정상)라 노이즈 조정은 실제 firing 데이터가 쌓이면 진행.
 
 ### 작업 2: 백업 런북 전면 개정 + 스크립트화 — 문서·스크립트 ✅ 완료 (2026-07-07), 리허설 잔여
 
@@ -121,7 +121,7 @@ docs/
   adr/0005-iac-layering-and-repo-strategy.md  ← IaC 3레이어 + 모노레포 전략
   adr/0006-remove-harbor-registry-off-cluster.md  ← Harbor 제거 (arm64 제약 + GHCR)
   cluster-access-kubeconfig.md    ← SSH 터널 접근 가이드 (노드 144.24.81.104 기준)
-  platform-alerting-todo.md       ← receiver 연결 TODO (rule은 완료)
+  platform-alerting-todo.md       ← rule + receiver 연결 완료 (Telegram), 남은 건 노이즈 조정
   platform-observability-checklist.md
   platform-backup-restore-runbook.md  ← 전면 개정 완료 (keycloak_db 중심, scripts/platform-backup.sh)
   keycloak-operations.md / keycloak-rbac-plan.md / keycloak-manual-rbac-checklist.md

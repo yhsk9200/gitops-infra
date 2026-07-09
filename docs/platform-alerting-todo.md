@@ -33,7 +33,7 @@ Grafana Alerting은 로그 기반 탐지나 Grafana UI 중심 운영이 필요�
 - [x] Alertmanager에서 firing alert 확인 (2026-07-09, Watchdog firing 실측)
 - [x] 알림 채널 결정 — Telegram
 - [x] Alertmanager receiver 및 route 설정 (`telegram-platform` receiver, Watchdog는 계속 `null`)
-- [ ] 실제 텔레그램 수신 검증 (synthetic alert 주입, 머지 직후 1회성)
+- [x] 실제 텔레그램 수신 검증 (2026-07-09, synthetic alert `TelegramWireTest` 주입 — firing/resolved 메시지 모두 실제 수신 확인)
 - [ ] 노이즈가 많은 rule 조정 (실제 firing 데이터 축적 후 판단)
 - [ ] 필요 시 Grafana Alerting provisioning 검토
 
@@ -76,3 +76,13 @@ Email(SMTP 자격증명)이나 Slack(워크스페이스 앱 등록)보다 설정
 - [x] 클러스터 재구축 후 주요 플랫폼 컴포넌트가 안정적으로 기동 중입니다.
 - [x] v1 rule의 firing 동작이 Alertmanager에서 확인되었습니다(Watchdog).
 - [x] 알림을 받을 채널이 정해졌습니다(Telegram).
+
+## 검증 기록
+
+| 날짜 | 검증 내용 | 결과 |
+| --- | --- | --- |
+| 2026-07-09 | rule 로딩 (6개 룰, 3개 그룹) | 전부 로딩됨, 전부 inactive |
+| 2026-07-09 | Prometheus→Alertmanager 배선 (Watchdog) | firing 상태로 전달 확인 (당시 receiver=null) |
+| 2026-07-09 | Alertmanager→Telegram 배선 (synthetic alert `TelegramWireTest`, severity=warning) | firing 메시지 수신, ~5분 후(group_interval) resolved 메시지도 수신 — 파이프라인 전 구간 실측 완료 |
+
+이제 남은 유일한 항목은 실제 운영 중 노이즈 조정(위 TODO)뿐입니다.
