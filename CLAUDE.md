@@ -8,7 +8,7 @@ OCI Always Free 단일 노드 k3s에 플랫폼 공용 인프라를 ArgoCD App of
 
 - **원격**: `origin` → `git@github.com:yhsk9200/gitops-infra.git` (단일 원격)
 - 포폴 핵심 가치: 제약(무료 티어·단일 노드·단독 운영) 하의 트레이드오프 기록 (ADR 0001~0006)
-- **자원 전제**: 설계는 worst-case **2 OCPU / 12GB**(ADR-0004) 기준. 실제 발급 노드는 grandfather로 **4 OCPU / 24GB 실측**(2026-07-02) — Oracle 정책 불확실성 때문에 re-fatten은 정책 확정까지 보류하기로 결정. 어느 shape가 와도 같은 레포로 재배포 가능
+- **자원 전제**: 설계는 worst-case **2 OCPU / 12GB**(ADR-0004) 기준. 실제 발급 노드는 grandfather로 **4 OCPU / 24GB 실측**(2026-07-02). **정책 확정됨**(2026-07-10 확인): Oracle이 2026-06-15부로 A1 무료 한도를 2/12로 반토막(무통보, 문서만 변경). 기존 4/24 노드는 회색지대(Always Free 계정 초과분은 향후 중지 가능, 삭제는 아님)이고 **terminate 시 상위 사양 재생성 불가 명시** → re-fatten은 영구 기각, 12GB 리핏 유지가 유일한 안전 설계. 어느 shape가 와도 같은 레포로 재배포 가능
 
 ## 레포 전략 (구조·관리)
 
