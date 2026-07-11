@@ -160,6 +160,11 @@ alertmanager:
   # 토큰 파일 하나로 격리했다.
   # Watchdog은 파이프라인 생존 확인용 상시 firing 메타 알림이라 텔레그램으로
   # 보내면 repeat_interval마다 영구 노이즈가 된다 → null 라우팅으로 명시 유지.
+  # InfoInhibitor도 같은 부류(info 알림이 존재하면 firing해서 그 통지를 억제하는
+  # 메타 알림 — 차트 기본 라우트도 null 처리). 우리가 route를 통째로 대체하면서
+  # 이 기본 null 라우팅이 빠져 있었고, 2026-07-11 CPUThrottlingHigh(info,
+  # platform-db)가 InfoInhibitor를 세워 텔레그램에 실 노이즈가 나간 것을 확인
+  # 후 추가 — 첫 실데이터 기반 노이즈 조정.
   config:
     global:
       resolve_timeout: 5m
@@ -172,7 +177,7 @@ alertmanager:
       routes:
         - receiver: 'null'
           matchers:
-            - alertname = "Watchdog"
+            - alertname =~ "Watchdog|InfoInhibitor"
     receivers:
       - name: 'null'
       - name: telegram-platform
