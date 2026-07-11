@@ -130,7 +130,26 @@ kubectl get nodes
 kubectl get applications -n argocd
 ```
 
-`kubectl get nodes`가 노드 2개를 반환하면 정상입니다.
+`kubectl get nodes`가 노드 1개(`aporiax-instance`)를 반환하면 정상입니다.
+
+### 6. 서비스 UI 접속 (터널 연결 후)
+
+ArgoCD·Prometheus·Alertmanager는 ClusterIP라 6443 터널만으로는 안 열립니다. 각 UI마다 별도 포트포워딩이 필요합니다.
+
+```bash
+# ArgoCD (https://localhost:8080, self-signed 경고 무시)
+kubectl port-forward -n argocd svc/argocd-server 8080:443
+# 초기 admin 비밀번호
+kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 -d
+
+# Prometheus (http://localhost:9090)
+kubectl port-forward -n platform-monitoring svc/platform-monitoring-promet-prometheus 9090:9090
+
+# Alertmanager (http://localhost:9093)
+kubectl port-forward -n platform-monitoring svc/platform-monitoring-promet-alertmanager 9093:9093
+```
+
+각 명령은 포그라운드를 점유하므로 별도 터미널(또는 `-f`로 백그라운드)에서 실행합니다. 공개 노출된 Grafana(`aporiax.duckdns.org`)·Keycloak(`aporiax-auth.duckdns.org`)·aporiax-pulse(`pulse.aporiax.duckdns.org`)는 터널 없이 바로 접속합니다 — 목록은 `README.md`의 "서비스 접속" 표 참조.
 
 ## RBAC: admin 자격증명을 그대로 쓸 것인가
 

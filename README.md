@@ -250,6 +250,15 @@ kubeseal --fetch-cert \
 
 **현재 상태**: 단일 노드 재구축 **완료** (2026-07-02, 런북 검증 체크리스트 통과). 노드 `144.24.81.104`(reserved public IP, k3s v1.32.13, arm64)에서 전 애플리케이션 Synced/Healthy로 가동 중입니다. cert-manager(Let's Encrypt) 기반 TLS로 Grafana(`aporiax.duckdns.org`)와 Keycloak(`aporiax-auth.duckdns.org`)이 외부 노출되어 있고, ArgoCD·Prometheus 등 컨트롤 플레인성 UI는 의도적으로 SSH 터널 전용입니다. 설계는 Always Free worst-case(2 OCPU/12GB, [ADR-0004](docs/adr/0004-refit-platform-for-12gb-free-tier.md)) 기준의 lean 상시 + on-demand 구조를 유지합니다. 재구축 과정에서 발견된 아키텍처 제약으로 Harbor를 제거하고 레지스트리를 오프클러스터화했습니다 ([ADR-0006](docs/adr/0006-remove-harbor-registry-off-cluster.md)). 가장 최근에는 이 플랫폼 위에 **첫 제품 테넌트(aporiax-pulse)를 온보딩**해 라이브로 가동 중입니다(아래).
 
+### 서비스 접속
+
+| 서비스 | URL | 접근 |
+| --- | --- | --- |
+| aporiax-pulse (제품 대시보드) | [pulse.aporiax.duckdns.org](https://pulse.aporiax.duckdns.org) | 공개 |
+| Grafana | [aporiax.duckdns.org](https://aporiax.duckdns.org) | 공개 (Keycloak SSO) |
+| Keycloak | [aporiax-auth.duckdns.org](https://aporiax-auth.duckdns.org) | 공개 (`platform` realm) |
+| ArgoCD / Prometheus / Alertmanager | — | **의도적 비공개** — 컨트롤 플레인성 UI는 SSH 터널 전용 ([접근 가이드](docs/cluster-access-kubeconfig.md)) |
+
 ### 첫 제품 테넌트: aporiax-pulse
 
 플랫폼이 실제로 제품을 호스팅할 수 있음을 보이는 첫 온보딩입니다. **라이브: [pulse.aporiax.duckdns.org](https://pulse.aporiax.duckdns.org)** (cert-manager/Let's Encrypt TLS).
