@@ -5,3 +5,11 @@ metadata:
   labels:
     app.kubernetes.io/part-of: product-pulse
     app.kubernetes.io/managed-by: argocd
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: product-routine
+  labels:
+    app.kubernetes.io/part-of: product-routine
+    app.kubernetes.io/managed-by: argocd

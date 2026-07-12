@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: product-routine
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+spec:
+  description: "family-routine-reward-app product tenant (ADR-0005/ADR-0007)"
+  sourceRepos:
+    - https://github.com/yhsk9200/family-routine-reward-app.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: product-routine
+  # No cluster-scoped resources needed — omitting this list denies them by
+  # default (opposite default from namespaceResourceWhitelist below).
+  clusterResourceWhitelist: []
+  # Explicit allow-list, not a deny-list: an unset/empty whitelist means
+  # "allow every namespaced kind", which would let this project create
+  # argoproj.io/Application resources too. That one Application (a nested
+  # App-of-Apps root) escaping into argocd namespace would let anything under
+  # this project redeclare its own project and jump the tenant boundary
+  # entirely — so this list only contains what the web app actually needs.
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ServiceAccount
+    - group: ""
+      kind: Service
+    - group: apps
+      kind: Deployment
+    - group: networking.k8s.io
+      kind: Ingress
+    # GEMINI_API_KEY/APP_ACCESS_CODE를 SealedSecret으로 앱 레포에 커밋하기
+    # 위함 — 온보딩 가이드 §4
+    - group: bitnami.com
+      kind: SealedSecret
