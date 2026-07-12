@@ -125,6 +125,7 @@ docs/
   adr/0007-first-product-tenant-onboarding.md  ← 첫 제품 테넌트 (pulse) 경계 패턴
   adr/0008-mlops-platform-pivot.md  ← MLOps 피봇 (0001 대체 — MinIO@NAS, 이미지 베이킹 승격)
   cluster-access-kubeconfig.md    ← SSH 터널 접근 가이드 (노드 144.24.81.104 기준)
+  product-tenant-onboarding-guide.md ← 앱 배포 온보딩 계약 (앱 레포 세션이 읽는 문서 — Part A/B 템플릿 + 에스컬레이션 조건)
   platform-alerting-todo.md       ← rule + receiver 연결 완료 (Telegram), 남은 건 노이즈 조정
   platform-observability-checklist.md
   platform-backup-restore-runbook.md  ← 전면 개정 완료 (keycloak_db 중심, scripts/platform-backup.sh)
