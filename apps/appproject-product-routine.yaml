@@ -37,3 +37,8 @@ spec:
     # Stage 2 PVC 전환 — SQLite 영속화
     - group: ""
       kind: PersistentVolumeClaim
+    # Stage 2 백업(§B-3) — CronJob만 whitelist에 올린다. Job은 불필요: CronJob
+    # 컨트롤러가 스케줄마다 Job을 자체 생성하는 것이지 ArgoCD가 그 Job을
+    # sync하는 게 아니므로, 매니페스트에 선언되지도 않는 Job까지 허용할 이유가 없다.
+    - group: batch
+      kind: CronJob
