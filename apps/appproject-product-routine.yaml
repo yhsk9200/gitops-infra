@@ -34,3 +34,6 @@ spec:
     # 위함 — 온보딩 가이드 §4
     - group: bitnami.com
       kind: SealedSecret
+    # Stage 2 PVC 전환 — SQLite 영속화
+    - group: ""
+      kind: PersistentVolumeClaim
