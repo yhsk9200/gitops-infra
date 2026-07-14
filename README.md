@@ -268,12 +268,9 @@ kubeseal --fetch-cert \
 - **왜 별도 레포** — 제품 코드([aporiax-pulse](https://github.com/yhsk9200/aporiax-pulse))는 다른 수명주기·소유권이라 별도 GitOps 단위입니다. 이 레포는 온보딩 매니페스트(AppProject·네임스페이스·RBAC·리프 Application)만 소유합니다 ([ADR-0005](docs/adr/0005-iac-layering-and-repo-strategy.md)).
 - **언어 선택** — DevOps 관성의 Go 대신 TypeScript/Next.js. 순수 웹 개발자 배경에서 TL 관점의 언어 판단을 더 정직하게 보여준다는 이유 ([ADR-0007](docs/adr/0007-first-product-tenant-onboarding.md)).
 
-> 📸 **스크린샷**(추가 예정): ArgoCD 앱 트리(전 앱 Synced/Healthy) · pulse 라이브 대시보드. 이미지를 `docs/images/`에 넣고 아래 주석을 해제하세요.
+![ArgoCD 앱 트리 — root-infra에서 17개 자식(Application 14 + AppProject 3)이 전부 Synced/Healthy로 fan-out](docs/images/argocd-app-tree.png)
 
-<!--
-![ArgoCD 앱 트리](docs/images/argocd-app-tree.png)
-![aporiax-pulse 라이브 대시보드](docs/images/pulse-dashboard.png)
--->
+> 📸 pulse 라이브 대시보드 스크린샷은 추가 예정.
 
 로드맵 (우선순위 순):
 
