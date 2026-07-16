@@ -1,0 +1,19 @@
+# Ingress 없음 — ADR-0008의 MLflow UI 비노출 결정(터널/tailnet 전용).
+# ArgoCD/Prometheus/Alertmanager와 동일하게 컨트롤 플레인성 UI는 외부에
+# 노출하지 않는다. 접근은 `kubectl port-forward svc/mlflow -n platform-mlops
+# 5000:5000` 또는 향후 tailnet 경유.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow
+  namespace: platform-mlops
+  labels:
+    app.kubernetes.io/name: mlflow
+    app.kubernetes.io/part-of: platform-infra
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: mlflow
+  ports:
+    - port: 5000
+      targetPort: 5000

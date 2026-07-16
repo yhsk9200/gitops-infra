@@ -83,9 +83,9 @@ jobs:
     steps:
       # ADR-0006 regression guard: goharbor shipped amd64-only and could not
       # start on the arm64 node — the mismatch surfaced only at deploy time.
-      # Every image we explicitly pin in helm-values/ must expose a
-      # linux/arm64 manifest. Keep this list in sync with the image.tag
-      # values in helm-values/ (change both in the same PR when a pin moves).
+      # Every image we explicitly pin (helm-values/ or manifests/) must expose
+      # a linux/arm64 manifest. Keep this list in sync with the pinned tags
+      # (change both in the same PR when a pin moves).
       - name: Assert linux/arm64 for every pinned image
         run: |
           set -uo pipefail
@@ -93,6 +93,7 @@ jobs:
             "docker.io/bitnamilegacy/keycloak:26.3.3-debian-12-r0"     # helm-values/iam/keycloak-values-{prod,dev}.yaml
             "docker.io/bitnamilegacy/postgresql:17.6.0-debian-12-r4"   # helm-values/database/postgres-values.yaml
             "docker.io/bitnamilegacy/os-shell:12-debian-12-r51"        # helm-values/database/postgres-values.yaml (init/metrics)
+            "ghcr.io/yhsk9200/mlflow:v3.6.0-pg1"                       # manifests/mlops/mlflow-deployment.yaml (선빌드 필요 — docs/platform-mlops-setup.md 7단계)
           )
           fail=0
           for img in "${IMAGES[@]}"; do

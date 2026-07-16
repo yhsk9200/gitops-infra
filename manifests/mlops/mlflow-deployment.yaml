@@ -1,0 +1,99 @@
+# ---------------------------------------------------------------------------
+# MLflow — tracking server + model registry (ADR-0008)
+# ---------------------------------------------------------------------------
+# backend store: platform-db PostgreSQL의 mlflow_db (mlflow-secret으로 URI 주입)
+# artifact store: MinIO@NAS. 단 --serve-artifacts로 프록시 — S3 자격증명은
+# 이 서버 하나에만 있고, 학습 잡은 NAS를 직접 보지 않는다.
+# UI는 비노출(Ingress 없음, manifests/mlops/mlflow-service.yaml 참조) —
+# ArgoCD/Prometheus/Alertmanager와 동일 원칙.
+# 활성화 전제(tailnet·MinIO·mlflow_db·mlflow-secret)와 순서는
+# docs/platform-mlops-setup.md 참조. 그 전에는 이 앱은 Healthy가 되지 않는다.
+# ---------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+  namespace: platform-mlops
+  labels:
+    app.kubernetes.io/name: mlflow
+    app.kubernetes.io/part-of: platform-infra
+spec:
+  replicas: 1
+  # Recreate: 단일 replica + 동일 PostgreSQL 스키마에 대한 마이그레이션
+  # (mlflow server가 기동 시 자동 실행)이 신구 파드에서 동시에 도는 걸 막는다
+  # — RollingUpdate는 신구 파드가 겹치는 창을 만들어 경합 가능성이 남는다.
+  # Grafana도 같은 부류 이유(RWO PVC + 단일 replica)로 Recreate를 채택했다
+  # (PR #7~#11 인시던트).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mlflow
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mlflow
+        app.kubernetes.io/part-of: platform-infra
+    spec:
+      # securityContext 미지정: 공식 이미지의 유저 컨텍스트를 아직 검증하지
+      # 않았다. Grafana의 init-chown-data 교착(PR #7~#11)에서 얻은 교훈은
+      # "검증 없이 제약부터 걸지 않는다"이지 "제약을 안 건다"가 아니다 — 확정은
+      # 활성화 검증 단계(docs/platform-mlops-setup.md)에서 실측 후.
+      containers:
+        - name: mlflow
+          image: ghcr.io/yhsk9200/mlflow:v3.6.0-pg1
+          command:
+            - mlflow
+            - server
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "5000"
+            - --serve-artifacts
+            # 기본 워커 4는 512Mi limit에서 OOM 위험(워커당 mlflow 프로세스가
+            # 각자 메모리를 점유). 소비자가 운영자 1인 + 학습 잡뿐이라 2로 축소.
+            - --workers
+            - "2"
+          ports:
+            - containerPort: 5000
+          env:
+            # 아래 두 값은 평문 — 비밀이 아니다. tailnet IP는 공인 인터넷에서
+            # 접근 불가하고, destination 문자열도 자격증명이 아니다.
+            # alertmanager-telegram-sealed-secret의 chat_id 평문 판단(PR #23)과
+            # 동일 논리 — 값 자체가 비밀이 아니면 SealedSecret으로 감쌀 이유가
+            # 없다.
+            - name: MLFLOW_ARTIFACTS_DESTINATION
+              value: "s3://mlflow-artifacts"
+            # placeholder — Step 1(MinIO@NAS 기동, docs/platform-mlops-setup.md)
+            # 완료 후 실측 tailnet IP로 치환한다.
+            - name: MLFLOW_S3_ENDPOINT_URL
+              value: "http://REPLACE-NAS-TAILNET-IP:9000"
+          envFrom:
+            # mlflow-secret (SealedSecret) 키:
+            #   MLFLOW_BACKEND_STORE_URI, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+            # 이 시크릿은 이 선작업 PR에 포함되지 않는다 — SealedSecret은
+            # 암호문 없이는 커밋할 수 없어 활성화 시점에 kubeseal로 생성한다.
+            # docs/platform-mlops-setup.md 참조.
+            - secretRef:
+                name: mlflow-secret
+          resources:
+            # ADR-0008 예산: MLflow 상시 ~0.4Gi. limit은 여유분 포함 512Mi.
+            # CPU limit은 레포 컨벤션을 확인할 수 없어 생략한다.
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          # 첫 기동 시 DB 스키마 마이그레이션 시간을 감안해 initialDelay를
+          # 넉넉히 잡는다(특히 liveness — 마이그레이션 중 재시작되면 역효과).
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 30
+            periodSeconds: 30

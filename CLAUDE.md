@@ -115,7 +115,7 @@ Mac(M5 Pro 18코어/48GB, OrbStack)에 **완전 격리 k3s 실험 클러스터**
 **통합 실행계획 (0008 Phase A~ + 0009, 2026-07-16 수립)** — 의존 순서:
 0. **tailnet 편입** (수동): OCI 노드 + NAS 편입 (Mac은 기편입). 검증 = 3자 상호 `tailscale ping`. kubeconfig 방식 C 전환 동반
 1. **MinIO@NAS** (수동): tailnet 전용 바인딩·버킷 생성 → 클러스터에서 S3 접근 실측 (0008 Phase A 잔여)
-2. **MLflow 배포** (GitOps, 이 레포): mlflow_db·SealedSecret·proxied artifacts·백업 런북/스크립트 확장 (0008 Phase B)
+2. **MLflow 배포** (GitOps, 이 레포): mlflow_db·SealedSecret·proxied artifacts·백업 런북/스크립트 확장 (0008 Phase B) — **선작업 완료** (2026-07-16, 브랜치 `feat/platform-mlops-mlflow`): 커스텀 이미지(공식 이미지 psycopg2·boto3 부재 실측 → GHCR 베이킹, pin 2.9.12/1.43.49 빌드·기동·/health 검증 완료)·Application(wave 3)·Deployment(Recreate, --workers 2, 512Mi limit)·백업 확장. **머지 = 배포이므로 활성화 체크리스트(`docs/platform-mlops-setup.md`) 완료 전 머지 금지** — SealedSecret·NAS IP 치환·이미지 선빌드가 머지 전 수동 단계
 3. **Mac 클러스터 부트스트랩** (2와 병렬 가능): 실험 레포 생성 → OrbStack VM + k3s(server 1, 이후 agent 증설) → Mac Prometheus
 4. **연결 계약 이행**: OCI Grafana에 Mac Prometheus datasource 추가(이 레포 PR) + Mac→MLflow 기록 실측 (2·3 완료 후)
 5. **실험 스택**: LLM 게이트웨이/RAG/eval + 호스트 네이티브 추론 하이브리드, 멀티노드 스케줄링 실험

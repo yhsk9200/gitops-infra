@@ -6,11 +6,13 @@
 
 ## 1. 무엇을, 왜 백업하는가 (스코프)
 
-Harbor를 제거한 뒤, 이 플랫폼에서 **재구성이 불가능한 stateful 자산은 사실상 하나 — Keycloak 데이터베이스(`keycloak_db`)** 뿐입니다. 나머지는 전부 다른 곳에서 복원됩니다.
+Harbor를 제거한 뒤, 이 플랫폼에서 **재구성이 불가능한 stateful 자산은 두 개 — Keycloak 데이터베이스(`keycloak_db`)와 MLflow 데이터베이스(`mlflow_db`)** ([ADR-0008](adr/0008-mlops-platform-pivot.md)) 뿐입니다. 나머지는 전부 다른 곳에서 복원됩니다.
 
 | 자산 | 재구성 경로 | 백업 필요? |
 | --- | --- | --- |
-| **`keycloak_db`** (realm·client·role·group·사용자) | 없음 — 런타임 상태 | **예 (P1, 유일한 크라운 주얼)** |
+| **`keycloak_db`** (realm·client·role·group·사용자) | 없음 — 런타임 상태 | **예 (P1)** |
+| **`mlflow_db`** (실험 run·모델 레지스트리 메타데이터) | 없음 — 런타임 상태 | **예 (P1)** |
+| MLflow 아티팩트 (모델 파일·run 산출물, MinIO@NAS 소재) | NAS 자체 — 별도 백업/반출 대상 | 아니오 — 이 런북·스크립트의 클러스터 백업 범위 밖 (ADR-0008) |
 | GitOps 매니페스트 | GitHub (`origin`) | 아니오 (원격이 곧 원본) |
 | `SealedSecret` 리소스 | GitHub | 아니오 |
 | SealedSecret **평문** | 비밀번호 관리자 (사람 관리) | 백업 대상 아님 — reseal 경로의 전제(§9) |
@@ -18,7 +20,7 @@ Harbor를 제거한 뒤, 이 플랫폼에서 **재구성이 불가능한 statefu
 | Prometheus/Grafana 데이터 | retention 5d·프로비저닝 대시보드 | 아니오 (휘발성) |
 | product-pulse 테넌트 | **무상태** (PVC 없음, 라이브 read만) | 아니오 |
 
-따라서 루틴 백업 세트는 **`keycloak_db` dump + GitOps commit 기준점 + manifest/checksum** 으로 구성합니다.
+따라서 루틴 백업 세트는 **`keycloak_db`·`mlflow_db` dump + GitOps commit 기준점 + manifest/checksum** 으로 구성합니다.
 
 **컨트롤러 키를 루틴에서 뺀 이유** — 컨트롤러 키는 플랫폼 전체에서 가장 위험한 파일입니다(유출 시 모든 SealedSecret 복호화 가능). 기본 복구 경로가 "새 키 발급 → 비밀번호 관리자 평문으로 reseal"이고 평문은 이미 비밀번호 관리자에 이중 보관되므로, 키를 매 백업마다 디스크에 쓰고 NAS로 반출하는 것은 노출 표면만 키웁니다. 키 백업은 "reseal을 건너뛰고 싶을 때"의 **옵션·수동·암호화** 단계로 격리합니다(§6).
 
@@ -36,7 +38,7 @@ Harbor를 제거한 뒤, 이 플랫폼에서 **재구성이 불가능한 statefu
 
 운영 백업으로 인정하는 최소 조건:
 
-- `keycloak_db.dump`가 생성되고 `pg_restore --list`가 성공한다.
+- `keycloak_db.dump`·`mlflow_db.dump`가 각각 생성되고 `pg_restore --list`가 성공한다.
 - 백업 시점의 GitOps commit이 기록되어 있다.
 - `manifest.yaml`이 포함되어 있다.
 - `checksums.sha256` 검증이 성공한다.
@@ -55,7 +57,7 @@ RETAIN=14 ./scripts/platform-backup.sh       # 로컬 보관 세트 수 조정
 
 스크립트가 하는 일:
 
-1. `keycloak_db`를 `pg_dump -Fc`로 덤프하고 `pg_restore --list`로 아카이브 유효성 검증.
+1. `BACKUP_DBS` 배열(`keycloak_db`, `mlflow_db`)을 순회하며 각 DB를 `pg_dump -Fc`로 덤프하고 `pg_restore --list`로 아카이브 유효성 검증.
 2. 현재 GitOps commit(`git rev-parse HEAD`)을 기록.
 3. `manifest.yaml` 생성(백업 ID·시각·commit·대상·주의).
 4. 세트 전체에 대한 `checksums.sha256` 생성 후 즉시 검증.
@@ -74,7 +76,8 @@ RETAIN=14 ./scripts/platform-backup.sh       # 로컬 보관 세트 수 조정
     ├── manifest.yaml
     ├── checksums.sha256
     ├── postgres/
-    │   └── keycloak_db.dump
+    │   ├── keycloak_db.dump
+    │   └── mlflow_db.dump
     └── gitops/
         └── commit.txt
 ```
@@ -88,17 +91,19 @@ mkdir -p "$BACKUP_ROOT"/{postgres,gitops}
 # GitOps 기준점
 git -C "$(pwd)" rev-parse HEAD > "$BACKUP_ROOT/gitops/commit.txt"
 
-# keycloak_db 덤프
-POSTGRES_PASSWORD="$(kubectl get secret postgres-db-secret -n platform-db -o jsonpath='{.data.postgres-password}' | base64 -d)"
-kubectl exec -n platform-db platform-db-postgres-postgresql-0 -c postgresql -- \
-  env PGPASSWORD="$POSTGRES_PASSWORD" \
-  pg_dump -U postgres -d keycloak_db -Fc \
-  > "$BACKUP_ROOT/postgres/keycloak_db.dump"
+# DB 덤프 — keycloak_db, mlflow_db 각각에 대해 반복 (DB 이름만 바뀜)
+for DB in keycloak_db mlflow_db; do
+  POSTGRES_PASSWORD="$(kubectl get secret postgres-db-secret -n platform-db -o jsonpath='{.data.postgres-password}' | base64 -d)"
+  kubectl exec -n platform-db platform-db-postgres-postgresql-0 -c postgresql -- \
+    env PGPASSWORD="$POSTGRES_PASSWORD" \
+    pg_dump -U postgres -d "$DB" -Fc \
+    > "$BACKUP_ROOT/postgres/${DB}.dump"
 
-# 덤프 검증
-kubectl exec -i -n platform-db platform-db-postgres-postgresql-0 -c postgresql -- \
-  pg_restore --list < "$BACKUP_ROOT/postgres/keycloak_db.dump" > /dev/null
-unset POSTGRES_PASSWORD
+  # 덤프 검증
+  kubectl exec -i -n platform-db platform-db-postgres-postgresql-0 -c postgresql -- \
+    pg_restore --list < "$BACKUP_ROOT/postgres/${DB}.dump" > /dev/null
+  unset POSTGRES_PASSWORD
+done
 
 # checksum
 cd "$BACKUP_ROOT"
@@ -170,12 +175,12 @@ NAS 권장 경로:
    - 경로 B: 백업한 컨트롤러 키를 먼저 복원(`kubectl apply` 후 컨트롤러 재기동).
 3. 백업 세트의 `gitops/commit.txt` 기준으로 GitOps 저장소를 맞춘다.
 4. `bootstrap/platform-root-infra.yaml`을 적용한다.
-5. PostgreSQL이 기동되면 `keycloak_db`를 복구한다(§9.2).
+5. PostgreSQL이 기동되면 `keycloak_db`·`mlflow_db`를 복구한다(§9.2).
 6. Keycloak을 기동하고 로그인·realm 설정을 검증한다(§9.4).
 
-### 9.2 keycloak_db 복구
+### 9.2 keycloak_db·mlflow_db 복구
 
-필요 시 ArgoCD에서 `platform-iam-keycloak`의 자동 동기화를 임시 중지합니다.
+필요 시 ArgoCD에서 `platform-iam-keycloak`(및 `platform-mlops-mlflow`)의 자동 동기화를 임시 중지합니다.
 
 ```bash
 POSTGRES_PASSWORD="$(kubectl get secret postgres-db-secret -n platform-db -o jsonpath='{.data.postgres-password}' | base64 -d)"
@@ -183,6 +188,17 @@ kubectl exec -i -n platform-db platform-db-postgres-postgresql-0 -c postgresql -
   env PGPASSWORD="$POSTGRES_PASSWORD" \
   pg_restore -U postgres -d keycloak_db --clean --if-exists \
   < "$BACKUP_ROOT/postgres/keycloak_db.dump"
+unset POSTGRES_PASSWORD
+```
+
+`mlflow_db`는 동일 패턴(`pg_restore --clean --if-exists`)이지만, 재구축 직후에는 chart auth가 `keycloak_db`만 생성하므로 `mlflow_db`와 `mlflow_admin` 사용자가 아직 없을 수 있습니다 — 없다면 먼저 `docs/platform-mlops-setup.md` 4단계의 `CREATE USER`/`CREATE DATABASE` 명령을 실행합니다.
+
+```bash
+POSTGRES_PASSWORD="$(kubectl get secret postgres-db-secret -n platform-db -o jsonpath='{.data.postgres-password}' | base64 -d)"
+kubectl exec -i -n platform-db platform-db-postgres-postgresql-0 -c postgresql -- \
+  env PGPASSWORD="$POSTGRES_PASSWORD" \
+  pg_restore -U postgres -d mlflow_db --clean --if-exists \
+  < "$BACKUP_ROOT/postgres/mlflow_db.dump"
 unset POSTGRES_PASSWORD
 ```
 
@@ -207,7 +223,7 @@ kubectl port-forward -n platform-iam svc/platform-iam-keycloak 8080:80
 리허설 범위(비파괴):
 
 - `pg_restore --list`로 덤프 목록 확인.
-- **임시 DB**에 `keycloak_db.dump`를 restore(운영 DB 아님).
+- **임시 DB**에 `keycloak_db.dump`를 restore(운영 DB 아님). `mlflow_db.dump`도 동일 절차.
 - NAS에서 내려받은 세트 기준 checksum 재검증.
 - (경로 B를 쓸 경우) 컨트롤러 키 파일 존재·암호화 보관 확인.
 
