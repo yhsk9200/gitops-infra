@@ -108,6 +108,18 @@ PR #8에서 CI 체크 등록 전 `gh pr merge` 통과 갭을 실증했던 "전�
 
 **다음 착수점 = Phase A (수동 몫 큼)**: Tailscale tailnet에 노드+NAS 편입 → NAS에 MinIO 기동·버킷 생성 → 클러스터에서 tailnet 경유 S3 접근 실측. 이때 kubeconfig 방식 C(tailnet) 전환 동반(`cluster-access-kubeconfig.md`). Phase B부터 GitOps 작업(MLflow 배포, mlflow_db, 백업 확장).
 
+### 실험 플레인: 격리 ML/LLMOps 클러스터 (Mac) — ADR-0009 승인 (2026-07-16)
+
+Mac(M5 Pro 18코어/48GB, OrbStack)에 **완전 격리 k3s 실험 클러스터** 구축 — OCI 노드 조인이 아닌 별도 클러스터. **연결 계약 3지점만 허용**(① 전송로 tailnet ② 관측: OCI Grafana ← Mac Prometheus datasource, 읽기 단방향 ③ 기록: Mac 워크로드 → OCI MLflow 클라이언트), 비연결 명시(OCI ArgoCD 원격 관리 금지·가용성 알림 금지·클러스터 간 스케줄링 금지 — 의존은 항상 Mac→OCI 단방향). 환경 실측(2026-07-16): Mac tailnet 기편입(`100.114.123.60`)·OCI RTT ~13ms·**VM 내 Metal GPU 패스스루 부재** → GPU 추론은 macOS 네이티브(Ollama/MLX) 하이브리드, k8s 파드는 CPU 스택(게이트웨이/RAG/eval). VM 상한 24GB/12코어. 실험 레포는 별도(이름 미정), 내부 GitOps 도구도 실험 레포 첫 결정 사항. ADR-0002/0008은 무수정 유지.
+
+**통합 실행계획 (0008 Phase A~ + 0009, 2026-07-16 수립)** — 의존 순서:
+0. **tailnet 편입** (수동): OCI 노드 + NAS 편입 (Mac은 기편입). 검증 = 3자 상호 `tailscale ping`. kubeconfig 방식 C 전환 동반
+1. **MinIO@NAS** (수동): tailnet 전용 바인딩·버킷 생성 → 클러스터에서 S3 접근 실측 (0008 Phase A 잔여)
+2. **MLflow 배포** (GitOps, 이 레포): mlflow_db·SealedSecret·proxied artifacts·백업 런북/스크립트 확장 (0008 Phase B)
+3. **Mac 클러스터 부트스트랩** (2와 병렬 가능): 실험 레포 생성 → OrbStack VM + k3s(server 1, 이후 agent 증설) → Mac Prometheus
+4. **연결 계약 이행**: OCI Grafana에 Mac Prometheus datasource 추가(이 레포 PR) + Mac→MLflow 기록 실측 (2·3 완료 후)
+5. **실험 스택**: LLM 게이트웨이/RAG/eval + 호스트 네이티브 추론 하이브리드, 멀티노드 스케줄링 실험
+
 ## 주요 파일 맵
 
 ```
@@ -124,6 +136,7 @@ docs/
   adr/0006-remove-harbor-registry-off-cluster.md  ← Harbor 제거 (arm64 제약 + GHCR)
   adr/0007-first-product-tenant-onboarding.md  ← 첫 제품 테넌트 (pulse) 경계 패턴
   adr/0008-mlops-platform-pivot.md  ← MLOps 피봇 (0001 대체 — MinIO@NAS, 이미지 베이킹 승격)
+  adr/0009-isolated-ml-experiment-cluster.md  ← 격리 ML/LLMOps 실험 클러스터 (Mac — 연결 계약 3지점, 프로덕션·실험 플레인 분리)
   cluster-access-kubeconfig.md    ← SSH 터널 접근 가이드 (노드 144.24.81.104 기준)
   product-tenant-onboarding-guide.md ← 앱 배포 온보딩 계약 (앱 레포 세션이 읽는 문서 — Part A/B 템플릿 + 에스컬레이션 조건)
   platform-alerting-todo.md       ← rule + receiver 연결 완료 (Telegram), 남은 건 노이즈 조정
