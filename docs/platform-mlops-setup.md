@@ -11,16 +11,20 @@ Unhealthy에 머문다("머지 = 배포"는 여기서도 예외 없음).
 
 ## 순서
 
+> 1~3단계의 구체 명령·함정(OCI iptables INPUT REJECT, 파드 내 MagicDNS 불가,
+> k3s tls-san, NAS 재부팅 바인딩)은 **[tailnet-minio-runbook.md](tailnet-minio-runbook.md)**
+> 가 기준 절차다. 아래는 게이트 요약.
+
 - [ ] **1. tailnet 편입 (OCI 노드 + NAS)** — Tailscale을 OCI 클러스터 노드와
       Synology NAS(DS920+)에 설치·조인. 검증: 노드·NAS·운영 단말 3자 상호
-      `tailscale ping` 성공.
+      `tailscale ping` 성공. (런북 Step 0 — kubeconfig 방식 C 전환도 이때)
 - [ ] **2. NAS에 MinIO 기동** — tailnet 인터페이스에만 바인딩(공인 노출 금지,
       ADR-0008의 tailnet-only 조건). `mlflow-artifacts` 버킷 생성 + MLflow
-      전용 access key 1쌍 발급(범위를 이 버킷으로 제한할 수 있으면 제한).
-      발급된 키는 **비밀번호 관리자에 즉시 보관**.
-- [ ] **3. 클러스터 → tailnet 경유 S3 접근 실측** — 임시 파드(예: `curlimages/curl`
-      또는 `amazon/aws-cli`)에서 tailnet IP로 MinIO 엔드포인트에 HEAD 요청을
-      보내 버킷이 보이는지 확인. 이 IP가 다음 단계의 실측값이다.
+      전용 access key 1쌍 발급(버킷 한정 정책 — 런북 1.2의 mlflow-rw).
+      발급된 키는 **비밀번호 관리자에 즉시 보관**. (런북 Step 1.1~1.2)
+- [ ] **3. 클러스터 → tailnet 경유 S3 접근 실측** — 무인증 health 200 +
+      전용 키로 버킷 ls, 2단계 검증(런북 1.3). 이때 쓴 NAS tailnet IP가
+      다음 단계의 실측값이다.
 - [ ] **4. mlflow_db 생성 (one-off)** — 기존 postgres PVC 세대에는 차트
       initdb가 다시 돌지 않으므로 수동 생성이 필요하다. 재구축(cluster-rebuild-runbook)
       때는 이 단계가 빠지지 않도록 런북에 단계 추가가 필요하다는 점을 메모해 둔다.
