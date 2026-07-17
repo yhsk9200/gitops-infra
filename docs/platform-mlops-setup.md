@@ -15,9 +15,10 @@ Unhealthy에 머문다("머지 = 배포"는 여기서도 예외 없음).
 > k3s tls-san, NAS 재부팅 바인딩)은 **[tailnet-minio-runbook.md](tailnet-minio-runbook.md)**
 > 가 기준 절차다. 아래는 게이트 요약.
 
-- [ ] **1. tailnet 편입 (OCI 노드 + NAS)** — Tailscale을 OCI 클러스터 노드와
-      Synology NAS(DS920+)에 설치·조인. 검증: 노드·NAS·운영 단말 3자 상호
-      `tailscale ping` 성공. (런북 Step 0 — kubeconfig 방식 C 전환도 이때)
+- [x] **1. tailnet 편입 (OCI 노드 + NAS)** — ✅ 2026-07-18 검증 완료: 노드
+      `aporiax-instance`=`100.69.52.25`, NAS `yhs-ds920`=`100.69.142.125`,
+      3자 상호 ping 성공(노드 경로는 DERP — 직결 승격은 Security List UDP
+      41641 개방 시). kubeconfig 방식 C 전환 완료(노드 무변경 — 런북 0.4).
 - [ ] **2. NAS에 MinIO 기동** — tailnet 인터페이스에만 바인딩(공인 노출 금지,
       ADR-0008의 tailnet-only 조건). `mlflow-artifacts` 버킷 생성 + MLflow
       전용 access key 1쌍 발급(버킷 한정 정책 — 런북 1.2의 mlflow-rw).
@@ -59,9 +60,9 @@ Unhealthy에 머문다("머지 = 배포"는 여기서도 예외 없음).
   결과 파일을 커밋한다. 암호화된 결과물만 git에 들어간다는 점은 기존
   SealedSecret들과 동일 — 평문은 이 저장소 어디에도 남기지 않는다.
 
-- [ ] **6. tailnet IP 치환** — `manifests/mlops/mlflow-deployment.yaml`의
-      `MLFLOW_S3_ENDPOINT_URL` 값 `http://REPLACE-NAS-TAILNET-IP:9000`을
-      3단계에서 실측한 실제 tailnet IP로 치환한다.
+- [x] **6. tailnet IP 치환** — ✅ 2026-07-18 반영: `MLFLOW_S3_ENDPOINT_URL`
+      = `http://100.69.142.125:9000` (NAS tailnet IP는 장비 고정이라 MinIO
+      기동 전 선반영 가능).
 - [ ] **7. 커스텀 이미지 선빌드** — 머지 전 GHCR에 `ghcr.io/yhsk9200/mlflow:v3.6.0-pg1`이
       이미 존재해야 `validate.yaml`의 arm64 가드가 통과한다(가드는 존재하는
       태그만 검사할 수 있다). 둘 중 하나로 진행:

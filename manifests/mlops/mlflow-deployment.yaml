@@ -64,10 +64,11 @@ spec:
             # 없다.
             - name: MLFLOW_ARTIFACTS_DESTINATION
               value: "s3://mlflow-artifacts"
-            # placeholder — Step 1(MinIO@NAS 기동, docs/platform-mlops-setup.md)
-            # 완료 후 실측 tailnet IP로 치환한다.
+            # NAS(yhs-ds920) tailnet IP — 2026-07-18 편입 실측값. tailnet IP는
+            # 장비당 고정이라 하드코딩 안전. 파드는 MagicDNS를 해석하지 못해
+            # 이름이 아닌 IP를 쓴다(tailnet-minio-runbook.md).
             - name: MLFLOW_S3_ENDPOINT_URL
-              value: "http://REPLACE-NAS-TAILNET-IP:9000"
+              value: "http://100.69.142.125:9000"
           envFrom:
             # mlflow-secret (SealedSecret) 키:
             #   MLFLOW_BACKEND_STORE_URI, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY

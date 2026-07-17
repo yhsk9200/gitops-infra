@@ -11,6 +11,11 @@ MLOps 실행계획(CLAUDE.md)의 Step 0(tailnet 편입)·Step 1(MinIO@NAS)을 �
 tailnet IP는 장비당 최초 1회 배정 후 고정되므로, 여기서 확정되는 IP를 git
 매니페스트(`MLFLOW_S3_ENDPOINT_URL`)에 하드코딩해도 안전하다.
 
+> **Step 0 완료 (2026-07-18 실측)**: 노드 `aporiax-instance` = `100.69.52.25`,
+> NAS `yhs-ds920` = `100.69.142.125`. 3자 상호 ping 성공(노드 경로는 DERP
+> 릴레이 — 아래 0.1 참고), 방식 C kubectl 전환 완료. 본문 중 취소선/정정
+> 표기는 검증 과정에서 기각된 가설의 기록이다.
+
 ---
 
 ## Step 0: tailnet 편입
@@ -31,19 +36,20 @@ tailscale ip -4        # 배정된 100.x IP 기록 → 이 값이 "노드 tailne
   **UDP 41641 인바운드**를 열면 직결(direct)로 승격된다. 필수는 아님 —
   릴레이여도 기능은 동일하고 지연만 손해.
 
-**주의 — Oracle 기본 iptables INPUT REJECT**: Oracle 이미지에는 22 외
-INPUT을 REJECT하는 기본 룰이 있다. tailscaled 데몬 연결 자체는 아웃바운드라
-무관하지만, **tailnet에서 노드로 들어오는 서비스 접근**(예: 방식 C의
-6443)이 `tailscale0` 인터페이스의 INPUT에서 막힐 수 있다. 0.3 검증에서
-`tailscale ping`은 되는데 서비스 포트가 안 열리면:
+**~~주의 — Oracle 기본 iptables INPUT REJECT~~ → 기각된 가설 (2026-07-18
+실측)**: Oracle 이미지의 INPUT REJECT 룰이 tailnet 인바운드 서비스 접근을
+막을 것으로 예상했으나, **실측 결과 막히지 않는다** — tailscaled가
+netfilter-mode=on(기본)에서 `ts-input` 체인을 INPUT의 REJECT 룰보다 앞에
+삽입하고 `-i tailscale0 -j ACCEPT`를 스스로 관리한다(`iptables -S INPUT`
+및 Mac→노드 6443 TCP 성공으로 확인). **수동 iptables 변경 불필요.**
+단, tailscale을 `--netfilter-mode=off`로 돌리는 경우에만 이 가설이
+되살아난다.
 
-```bash
-sudo iptables -I INPUT -i tailscale0 -j ACCEPT
-sudo netfilter-persistent save     # 재부팅 지속화
-```
-
-(80/443 hostPort가 수정 없이 됐던 건 FORWARD 체인 경유였기 때문 — CLAUDE.md.
-tailscale0 → 호스트 프로세스는 INPUT 체인이라 사정이 다르다.)
+DERP 릴레이의 실제 원인은 호스트 방화벽이 아니라 **OCI Security List의
+UDP 41641 인바운드 차단**이다. 노드 경로(Mac↔노드 ~178ms, 노드↔NAS 71ms —
+둘 다 도쿄 DERP 경유)를 직결로 올리려면 Security List에서 UDP 41641
+인바운드를 열면 된다. 아티팩트 벌크 전송(노드→NAS)이 시작되는 Step 1
+이후에는 릴레이 대역폭 제한이 체감될 수 있어 **개방 권장**.
 
 ### 0.2 NAS (Synology DS920+, DSM 7)
 
@@ -68,23 +74,26 @@ tailscale ping <NAS tailnet IP>
 
 3자 상호 ping이 전부 성공하면 Step 0의 전송로는 완료.
 
-### 0.4 kubeconfig 방식 C 전환 (선택이지만 이 시점이 적기)
+### 0.4 kubeconfig 방식 C 전환 — ✅ 완료 (2026-07-18, 노드 무변경)
 
-k3s 서빙 인증서 SAN에 tailnet IP가 없으므로 그냥 접속하면 TLS 검증 실패한다.
-노드에서 SAN을 추가:
+원래 계획은 tls-san 추가 + k3s 재시작이었으나 **불필요했다**: k3s 서빙
+인증서 SAN에 노드 호스트네임(`DNS:aporiax-instance`)이 기본 포함돼 있고,
+tailnet 장비명이 호스트네임과 동일해서 **MagicDNS 단축명으로 접속하면
+인증서 검증이 그대로 통과**한다(openssl SAN 실측 + `kubectl get nodes`
+성공). 실행한 것:
 
 ```bash
-# 노드에서
-sudo mkdir -p /etc/rancher/k3s
-printf 'tls-san:\n  - "%s"\n' "<노드 tailnet IP>" | sudo tee -a /etc/rancher/k3s/config.yaml
-sudo systemctl restart k3s   # API 수 초 단절, 파드는 무영향
+# Mac에서 — server를 IP가 아닌 MagicDNS 단축명으로
+cp ~/.kube/oci-platform.yaml ~/.kube/oci-platform-tailnet.yaml
+sed -i '' 's|https://127.0.0.1:6443|https://aporiax-instance:6443|' ~/.kube/oci-platform-tailnet.yaml
+KUBECONFIG=~/.kube/oci-platform-tailnet.yaml kubectl get nodes   # Ready 확인
 ```
 
-Mac에서 `~/.kube/oci-platform.yaml`을 복사해 `server: https://<노드 tailnet
-IP>:6443`으로 바꾼 tailnet용 kubeconfig를 만들고 `kubectl get nodes` 실측.
-성공 시 `cluster-access-kubeconfig.md`에 방식 C를 실측 기록으로 갱신한다
-(방식 B SSH 터널은 tailnet 장애 시 폴백으로 유지). 0.1의 INPUT REJECT
-주의사항이 여기서 발현될 수 있다.
+tailnet **IP**(`100.69.52.25`)로 붙고 싶은 경우에만 SAN에 IP가 없어
+tls-san 추가가 필요하다 — 단축명 방식이 노드 무변경이라 우선.
+(이 방식의 전제 = tailnet 장비명과 노드 호스트네임 일치. 장비명을 바꾸면
+깨지므로 바꾸지 말 것.) 방식 B SSH 터널은 tailnet 장애 폴백으로 유지 —
+`cluster-access-kubeconfig.md` 방식 C 섹션에 정식 기록됨.
 
 ---
 
@@ -185,8 +194,8 @@ platform-mlops-setup.md 4단계(mlflow_db)부터 이어서 진행.
 
 | 증상 | 원인 후보 | 조치 |
 |---|---|---|
-| `tailscale ping` OK, 노드 서비스 포트 접속 실패 | Oracle 기본 INPUT REJECT가 tailscale0 인바운드 차단 | 0.1의 `iptables -I INPUT -i tailscale0 -j ACCEPT` + persist |
-| ping이 계속 `via DERP` | 직결용 UDP 경로 부재 | 기능상 무해. 지연 개선 원하면 Security List UDP 41641 인바운드 개방 |
-| 방식 C kubectl TLS 오류 | k3s 인증서 SAN에 tailnet IP 없음 | 0.4의 `tls-san` 추가 + k3s 재시작 |
+| `tailscale ping` OK, 노드 서비스 포트 접속 실패 | (기본 구성에선 미발생 — ts-input이 tailscale0 ACCEPT를 자체 관리, 2026-07-18 실측) `--netfilter-mode=off`로 바꾼 경우에만 발현 | netfilter-mode 기본값 유지, 또는 `iptables -I INPUT -i tailscale0 -j ACCEPT` |
+| ping이 계속 `via DERP` (노드 경로 실측: 도쿄 DERP, Mac↔노드 ~178ms·노드↔NAS 71ms) | OCI Security List UDP 41641 인바운드 차단 | 기능상 무해. 아티팩트 벌크 전송 대역폭 위해 Security List UDP 41641 개방 권장 |
+| 방식 C kubectl TLS 오류 | server를 tailnet **IP**로 지정 (SAN에 IP 없음) | `https://aporiax-instance:6443`(MagicDNS 단축명 = SAN의 호스트네임) 사용 — 0.4. IP 고정이 꼭 필요할 때만 tls-san 추가 |
 | NAS 재부팅 후 MinIO 다운 | tailnet IP 바인딩 시점에 Tailscale 미기동 | Tailscale 패키지 기동 확인 → `docker start minio` |
 | 파드에서 `nas:9000` 해석 실패 | MagicDNS는 파드 DNS 밖 | tailnet IP 직접 사용 (정상 동작) |
