@@ -99,25 +99,48 @@ tls-san 추가가 필요하다 — 단축명 방식이 노드 무변경이라 �
 
 ## Step 1: MinIO@NAS
 
-### 1.1 기동 — tailnet 인터페이스 전용 바인딩
+### 1.1 기동 — 루프백 바인딩 + tailscaled 인바운드 프록시 (2026-07-18 정정)
 
-공인 노출 금지(ADR-0008)의 실현 방법: **컨테이너 포트를 NAS tailnet IP에만
-바인딩**한다. DSM Container Manager UI는 바인딩 IP 지정을 지원하지 않으므로
+**원계획(tailnet IP 바인딩)은 이 NAS에서 불가** — DSM에 TUN 디바이스가 없어
+Tailscale이 **userspace networking 모드**로 동작하고, 이 모드에서는
+`tailscale0` 인터페이스도, 호스트에 배정된 100.x IP도 존재하지 않아
+`-p 100.69.142.125:...` 바인딩이 실패한다. 대신 userspace 모드의 정석 구성:
+**컨테이너를 127.0.0.1에 바인딩**하면 tailscaled가 tailnet 인바운드 TCP를
+127.0.0.1로 프록시해 준다 (실측: DSM 5000/5001이 tailnet IP로 접속됨 —
+프록시 동작 증명). 공인·LAN 어디에도 안 열리므로 노출 표면은 tailnet IP
+바인딩보다 오히려 좁다. **클러스터 쪽 엔드포인트는 변경 없음** —
+`http://100.69.142.125:9000`으로 접속하면 tailscaled가 받아서 로컬 MinIO로
+넘긴다.
+
+DSM Container Manager UI는 바인딩 IP 지정을 지원하지 않으므로
 SSH(제어판 → 터미널에서 활성화)로 docker CLI를 쓴다.
 
 ```bash
 ssh <admin>@<NAS-LAN-IP>
-mkdir -p /volume1/docker/minio/data
+sudo mkdir -p /volume1/docker/minio/data
 
-docker run -d --restart unless-stopped --name minio \
-  -p <NAS tailnet IP>:9000:9000 \
-  -p <NAS tailnet IP>:9001:9001 \
+sudo docker run -d --restart unless-stopped --name minio \
+  -p 127.0.0.1:9000:9000 \
+  -p 127.0.0.1:9001:9001 \
   -e MINIO_ROOT_USER='<루트 계정 — 비밀번호 관리자에서 생성>' \
   -e MINIO_ROOT_PASSWORD='<루트 비밀번호 — 동일>' \
   -v /volume1/docker/minio/data:/data \
   minio/minio:RELEASE.2025-09-07T16-13-09Z \
   server /data --console-address ":9001"
 ```
+
+userspace 모드의 트레이드오프 (수용):
+- WireGuard 암복호화가 커널이 아닌 프로세스에서 돌아 **처리량이 낮다**
+  (J4125에서 체감 가능). 대용량 아티팩트에서 병목이 확인되면 TUN 활성화
+  (`sudo /var/packages/Tailscale/target/bin/tailscale configure-host` 후
+  패키지 재시작, DSM 업데이트 후 재실행 필요할 수 있음) + tailnet IP
+  바인딩으로 전환.
+- MinIO 접근 로그의 소스 IP가 전부 127.0.0.1로 보인다 (인증은 key 기반이라
+  무해).
+- 프록시는 TCP 전용 (S3는 TCP라 무관).
+- tailnet의 **모든** 장비가 프록시를 통해 도달 가능 — 현재 tailnet에 타
+  사용자 장비(choco8411)가 있으므로, 신경 쓰이면 Tailscale ACL로 9000
+  접근을 노드·운영 단말로 한정 (미해결 항목 "tailnet ACL 설계"의 일부).
 
 - **핀 태그 = `RELEASE.2025-09-07T16-13-09Z`** (2026-07-18 Docker Hub 실측 —
   community 최신. `latest` 금지는 레포 전반의 핀 원칙과 동일). DS920+
@@ -126,11 +149,13 @@ docker run -d --restart unless-stopped --name minio \
   관리는 아래 `mc` CLI 기준.
 - 루트 자격증명은 생성 즉시 비밀번호 관리자로. 쉘 히스토리 주의
   (platform-mlops-setup.md 4단계와 동일한 요령).
-- **재부팅 함정**: tailnet IP 바인딩은 컨테이너 시작 시점에 Tailscale이 떠
-  있어야 성공한다. NAS 재부팅 후 MinIO가 안 떠 있으면 Tailscale 패키지 기동
-  확인 → `docker start minio`.
+- ~~재부팅 함정(tailnet IP 바인딩 시점 의존)~~ → 루프백 바인딩으로 **해소**:
+  127.0.0.1 바인딩은 Tailscale 기동 여부와 무관하게 항상 성공한다. 대신
+  Tailscale 패키지가 죽으면 (MinIO는 살아 있어도) tailnet에서 접근만 안 됨
+  — 트러블슈팅 표 참조.
 - 공인 비노출 이중 확인: 홈 라우터에 9000/9001 포트포워딩·UPnP 없음 확인 +
-  외부망(폰 LTE)에서 `http://<집 공인IP>:9000` 접속 실패 확인. tailnet IP
+  외부망(폰 LTE)에서 `http://<집 공인IP>:9000` 접속 실패 확인 + LAN IP로
+  `curl http://<NAS-LAN-IP>:9000` 실패 확인(루프백 바인딩 증명). 루프백
   바인딩이 1차 방어, NAT 비노출이 2차.
 
 ### 1.2 버킷 + MLflow 전용 키 (최소 권한)
@@ -199,5 +224,6 @@ platform-mlops-setup.md 4단계(mlflow_db)부터 이어서 진행.
 | `tailscale ping` OK, 노드 서비스 포트 접속 실패 | (기본 구성에선 미발생 — ts-input이 tailscale0 ACCEPT를 자체 관리, 2026-07-18 실측) `--netfilter-mode=off`로 바꾼 경우에만 발현 | netfilter-mode 기본값 유지, 또는 `iptables -I INPUT -i tailscale0 -j ACCEPT` |
 | ping이 계속 `via DERP` (노드 경로 실측: 도쿄 DERP, Mac↔노드 ~178ms·노드↔NAS 71ms) | OCI Security List UDP 41641 인바운드 차단 | 기능상 무해. 아티팩트 벌크 전송 대역폭 위해 Security List UDP 41641 개방 권장 |
 | 방식 C kubectl TLS 오류 | server를 tailnet **IP**로 지정 (SAN에 IP 없음) | `https://aporiax-instance:6443`(MagicDNS 단축명 = SAN의 호스트네임) 사용 — 0.4. IP 고정이 꼭 필요할 때만 tls-san 추가 |
-| NAS 재부팅 후 MinIO 다운 | tailnet IP 바인딩 시점에 Tailscale 미기동 | Tailscale 패키지 기동 확인 → `docker start minio` |
+| tailnet에서 NAS 9000 접속 불가 (MinIO 컨테이너는 정상) | Tailscale 패키지 중지 — userspace 프록시가 인바운드를 전달 못 함 (DSM 업데이트 후 흔함) | 패키지 센터에서 Tailscale 실행 확인. 로컬 확인: NAS에서 `curl http://127.0.0.1:9000/minio/health/live` |
+| `-p <tailnet IP>:9000` 바인딩 실패 (cannot assign requested address) | TUN 부재 → userspace 모드라 100.x IP가 호스트에 없음 | 정상 — 1.1의 루프백 바인딩 구성 사용 (2026-07-18 실측 정정) |
 | 파드에서 `nas:9000` 해석 실패 | MagicDNS는 파드 DNS 밖 | tailnet IP 직접 사용 (정상 동작) |

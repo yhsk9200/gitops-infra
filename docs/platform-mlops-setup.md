@@ -19,10 +19,12 @@ Unhealthy에 머문다("머지 = 배포"는 여기서도 예외 없음).
       `aporiax-instance`=`100.69.52.25`, NAS `yhs-ds920`=`100.69.142.125`,
       3자 상호 ping 성공(노드 경로는 DERP — 직결 승격은 Security List UDP
       41641 개방 시). kubeconfig 방식 C 전환 완료(노드 무변경 — 런북 0.4).
-- [ ] **2. NAS에 MinIO 기동** — tailnet 인터페이스에만 바인딩(공인 노출 금지,
-      ADR-0008의 tailnet-only 조건). `mlflow-artifacts` 버킷 생성 + MLflow
-      전용 access key 1쌍 발급(버킷 한정 정책 — 런북 1.2의 mlflow-rw).
-      발급된 키는 **비밀번호 관리자에 즉시 보관**. (런북 Step 1.1~1.2)
+- [ ] **2. NAS에 MinIO 기동** — 127.0.0.1 바인딩 + tailscaled userspace
+      인바운드 프록시(NAS에 TUN 부재 실측 — 공인·LAN 비노출, tailnet 접근은
+      유지. ADR-0008의 tailnet-only 조건 충족, 런북 1.1 정정 참조).
+      `mlflow-artifacts` 버킷 생성 + MLflow 전용 access key 1쌍 발급(버킷
+      한정 정책 — 런북 1.2의 mlflow-rw). 발급된 키는 **비밀번호 관리자에
+      즉시 보관**. (런북 Step 1.1~1.2)
 - [ ] **3. 클러스터 → tailnet 경유 S3 접근 실측** — 무인증 health 200 +
       전용 키로 버킷 ls, 2단계 검증(런북 1.3). 이때 쓴 NAS tailnet IP가
       다음 단계의 실측값이다.
