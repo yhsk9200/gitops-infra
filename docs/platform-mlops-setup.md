@@ -24,10 +24,11 @@ Unhealthy에 머문다("머지 = 배포"는 여기서도 예외 없음).
       이미지 핀 RELEASE.2025-09-07T16-13-09Z, `mlflow-artifacts` 버킷 생성.
       MLflow 전용 키(mlflow-rw 정책)는 발급 여부 확인 후 3단계 인증
       테스트에서 검증 — 키는 **비밀번호 관리자에 즉시 보관**.
-- [ ] **3. 클러스터 → tailnet 경유 S3 접근 실측** — 연결성은 ✅ 완료
+- [x] **3. 클러스터 → tailnet 경유 S3 접근 실측** — 연결성 ✅ 완료
       (2026-07-18: Mac→tailnet 200, LAN 차단 확인, **클러스터 파드→MinIO
-      HTTP 200** — MLflow가 쓸 체인 전 구간 실측). 잔여: mlflow 전용 키로
-      `s3 ls` 인증 테스트(런북 1.3의 (2) — 시크릿이라 운영자 직접 실행).
+      HTTP 200** — MLflow가 쓸 체인 전 구간 실측). 전용 키 인증 테스트는
+      9단계(배포 후 검증)로 통합 — 배포되면 mlflow-secret을 envFrom으로
+      참조하는 파드로 검증(시크릿이 세션/히스토리에 안 나오는 경로).
 **실행 위치 (4·5 공통)**: OCI 노드에 SSH 불필요 — `kubectl exec`는
 원격 클라이언트 명령이라 **Mac 터미널**에서 실행한다(kubectl이 API 서버에
 "그 파드 안에서 이 명령을 실행해달라"고 요청하는 구조). 단 아래 두 전제가
@@ -39,7 +40,7 @@ export KUBECONFIG=~/.kube/oci-platform-tailnet.yaml  # 기본 컨텍스트는 or
 kubectl config current-context                       # 확인 습관: oci-platform-tailnet 이어야 함
 ```
 
-- [ ] **4. mlflow_db 생성 (one-off)** — 기존 postgres PVC 세대에는 차트
+- [x] **4. mlflow_db 생성 (one-off)** — ✅ 2026-07-18 완료·검증됨(mlflow_db owner=mlflow_admin 실측). 기존 postgres PVC 세대에는 차트
       initdb가 다시 돌지 않으므로 수동 생성이 필요하다. 재구축(cluster-rebuild-runbook)
       때는 이 단계가 빠지지 않도록 런북에 단계 추가가 필요하다는 점을 메모해 둔다.
 
@@ -66,7 +67,7 @@ kubectl config current-context                       # 확인 습관: oci-platfo
   평문을 쉘 히스토리에 남기지 않도록 주의(새 셸, 히스토리 무시 옵션, 또는
   실행 후 즉시 히스토리 삭제 중 편한 방법으로).
 
-- [ ] **5. mlflow-secret SealedSecret 생성** — namespace `platform-mlops`,
+- [x] **5. mlflow-secret SealedSecret 생성** — ✅ 2026-07-18 완료·검증됨(kubeconform Valid, 3키 확인). namespace `platform-mlops`,
       keys:
       - `MLFLOW_BACKEND_STORE_URI` = `postgresql://mlflow_admin:<$MLFLOW_DB_PW>@platform-db-postgres-postgresql.platform-db.svc.cluster.local:5432/mlflow_db`
       - `AWS_ACCESS_KEY_ID` = `mlflow` (런북 1.2에서 만든 사용자명)
@@ -118,6 +119,9 @@ kubectl config current-context                       # 확인 습관: oci-platfo
         `curl localhost:5000/health` → 200
       - 테스트 run을 하나 기록하고, 아티팩트 업로드가 MinIO
         `mlflow-artifacts` 버킷에 실제로 생성되는지 확인
+      - S3 전용 키 인증 검증(3단계 잔여 통합): platform-mlops 네임스페이스에
+        `envFrom: secretRef mlflow-secret` 파드(amazon/aws-cli)를 띄워
+        `s3 ls s3://mlflow-artifacts` — 시크릿을 화면에 노출하지 않고 검증
 - [ ] **10. 백업 확장 검증** — `scripts/platform-backup.sh` 실행 후 결과
       backup set에 `mlflow_db.dump`가 포함돼 있는지 확인.
 
