@@ -73,9 +73,14 @@ kubectl config current-context                       # 확인 습관: oci-platfo
       - `AWS_ACCESS_KEY_ID` = `mlflow` (런북 1.2에서 만든 사용자명)
       - `AWS_SECRET_ACCESS_KEY` = (런북 1.2에서 발급한 MinIO secret key)
 
-  같은 셸에서 이어서 — `kubeseal`은 컨트롤러 공개키를 먼저 파일로 받아두는
+  `kubeseal`은 컨트롤러 공개키를 먼저 파일로 받아두는
   레포 관례(`cluster-rebuild-runbook.md` 3.3)를 따른다. `pub-cert.pem`은
-  공개키라 민감하지 않지만 `.gitignore` 대상(레포 루트에 임시로만 둠):
+  공개키라 민감하지 않지만 `.gitignore` 대상(레포 루트에 임시로만 둠).
+
+  > **주의 (2026-07-19 실사고)**: 4단계 셸 변수(`$MLFLOW_DB_PW`)에 의존하지
+  > 말 것 — 다른 셸에서 실행하면 빈 문자열로 치환돼 **빈 비밀번호가 그대로
+  > 실링**되고, 배포 후 `fe_sendauth: no password supplied` CrashLoop으로
+  > 나타난다. 값은 아래처럼 직접 입력받고 **길이 확인**을 거친다.
 
   ```bash
   kubeseal --fetch-cert \
@@ -83,7 +88,10 @@ kubectl config current-context                       # 확인 습관: oci-platfo
     --controller-namespace=platform-system \
     > pub-cert.pem
 
+  read -rs MLFLOW_DB_PW   # 4단계에서 비밀번호 관리자에 저장한 값 붙여넣기
+  echo "입력 길이: ${#MLFLOW_DB_PW}"   # 0이면 다시 — 빈 값 실링 사고 방지
   read -rs MINIO_SK    # 런북 1.2에서 발급한 mlflow secret key 붙여넣고 엔터 (화면에 안 보임)
+  echo "입력 길이: ${#MINIO_SK}"
 
   kubectl create secret generic mlflow-secret \
     --namespace platform-mlops --dry-run=client -o yaml \
