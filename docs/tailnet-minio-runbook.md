@@ -158,13 +158,28 @@ userspace 모드의 트레이드오프 (수용):
   `curl http://<NAS-LAN-IP>:9000` 실패 확인(루프백 바인딩 증명). 루프백
   바인딩이 1차 방어, NAT 비노출이 2차.
 
-### 1.2 버킷 + MLflow 전용 키 (최소 권한)
+### 1.2 버킷 + MLflow 전용 키 (최소 권한) — mc는 컨테이너로 (2026-07-18 정정)
 
 루트 키를 MLflow에 주지 않는다 — 버킷 한정 전용 사용자를 만든다.
-`mc`는 Mac에서 실행 (`brew install minio-mc`, tailnet 경유):
+
+**mc 실행 방법 정정**: ~~Mac에서 brew minio-mc~~ → macOS 네이티브 mc
+바이너리는 Apple M5에서 cgo SIGSEGV로 즉사한다(2026-07-18 `mc --version`
+실측). **Linux 컨테이너 mc는 정상**(go1.24.6 linux/arm64 실측) — 컨테이너로
+실행한다. NAS에서 실행하면 루프백 바인딩에 직결이라 프록시 의존도 없어
+**권장**. Mac(OrbStack)에서 실행해도 됨 — 컨테이너→tailnet 라우팅 실측
+확인, alias만 `http://100.69.142.125:9000`으로.
 
 ```bash
-mc alias set nasminio http://<NAS tailnet IP>:9000 '<루트 계정>' '<루트 비밀번호>'
+# NAS에서 (MinIO 기동한 SSH 세션 이어서) — 컨테이너 셸 진입
+sudo docker run --rm -it --network host \
+  --entrypoint /bin/sh minio/mc:RELEASE.2025-08-13T08-35-41Z
+```
+
+이하 명령은 전부 컨테이너 셸 안에서. `--rm` 일회용 셸이라 히스토리가
+호스트에 남지 않으므로 시크릿을 인자로 넘겨도 잔류하지 않는다:
+
+```bash
+mc alias set nasminio http://127.0.0.1:9000 '<루트 계정>'   # secret key는 프롬프트로 입력
 mc mb nasminio/mlflow-artifacts
 
 # 버킷 한정 read/write 정책
@@ -184,7 +199,7 @@ EOF
 mc admin policy create nasminio mlflow-rw /tmp/mlflow-rw.json
 mc admin user add nasminio mlflow '<MLflow 전용 secret key — 비밀번호 관리자에서 생성>'
 mc admin policy attach nasminio mlflow-rw --user mlflow
-rm /tmp/mlflow-rw.json
+exit   # 컨테이너 종료 = 셸 기록·/tmp 정책 파일 소멸
 ```
 
 여기서 만든 `mlflow` / secret key 쌍이 platform-mlops-setup.md 5단계
