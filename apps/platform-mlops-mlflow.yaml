@@ -1,0 +1,25 @@
+# 머지 = 배포. 이 앱은 mlflow_db·mlflow-secret·MinIO@NAS가 선행돼야
+# Healthy — 활성화 순서는 docs/platform-mlops-setup.md 참조.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-mlops-mlflow
+  namespace: argocd
+  annotations:
+    # postgres(wave 1) 이후면 충분 — mlflow_db 자체는 수동 one-off라 wave로
+    # 강제할 수 없다(docs/platform-mlops-setup.md). prometheus(wave 3)와는
+    # 독립 네임스페이스라 병렬 진행 가능.
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: platform-infra
+  source:
+    repoURL: "https://github.com/yhsk9200/gitops-infra.git"
+    targetRevision: main
+    path: manifests/mlops
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: platform-mlops
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

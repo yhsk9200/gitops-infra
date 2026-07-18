@@ -1,0 +1,43 @@
+name: build-mlflow-image
+
+# MLflow 커스텀 이미지(images/mlflow/Dockerfile) 빌드·푸시 파이프라인.
+#
+# 태그 규칙: 업스트림 MLflow 버전 + `-pgN` 리비전 (예: v3.6.0-pg1). 이미지를
+# 바꿀 때(Dockerfile 변경 = 새 리비전)는 이 파일의 tags,
+# manifests/mlops(mlflow-deployment.yaml의 image), validate.yaml의 arm64
+# 가드 IMAGES — 세 곳을 같은 PR에서 함께 갱신할 것. 어긋나면 arm64 가드가
+# 존재하지 않는 옛 태그를 검사하거나, 배포가 GHCR에 없는 새 태그를 당겨
+# ImagePullBackOff가 난다.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "images/mlflow/**"
+
+jobs:
+  build:
+    name: build and push (linux/amd64, linux/arm64)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: images/mlflow
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/yhsk9200/mlflow:v3.6.0-pg1

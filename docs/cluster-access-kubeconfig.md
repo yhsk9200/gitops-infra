@@ -65,17 +65,29 @@ k3s API 서버는 `6443/tcp`에서 동작합니다. 이 포트를 OCI Security L
 - 작업할 때마다 터널을 띄워야 합니다(스크립트화로 완화).
 - 운영자 수가 늘면 키 배포/회수 관리 부담이 커집니다 → 이때 C로 전환.
 
-### C. VPN / Tailscale 오버레이 — 성숙 단계 전환
+### C. VPN / Tailscale 오버레이 — ✅ 전환 완료 (2026-07-18 실측)
 
-`known_hosts`에 `100.114.123.60`(Tailscale CGNAT 대역 `100.64.0.0/10`)이 보입니다. 이미 Tailscale 등 메시 VPN을 쓰고 있다면, 노드의 tailnet IP로 6443을 **사설 오버레이 안에서만** 노출하는 방식이 가장 깔끔합니다.
+MLOps Phase A(`tailnet-minio-runbook.md`)에서 노드가 tailnet에 편입되면서
+방식 C가 활성화됐습니다. 노드 tailnet 장비명 `aporiax-instance`
+(`100.69.52.25`), kubeconfig는 `~/.kube/oci-platform-tailnet.yaml`.
 
 - 운영자별 디바이스 인증/ACL로 접근을 통제합니다.
 - SSH 터널을 매번 띄울 필요가 없습니다.
-- 6443은 여전히 공인 인터넷에는 닫혀 있습니다.
+- 6443은 여전히 공인 인터넷에는 닫혀 있습니다 (tailnet 인바운드는
+  tailscaled가 관리하는 `ts-input` 체인이 허용 — Oracle 기본 INPUT REJECT보다
+  앞에 삽입됨을 실측 확인).
 
-이 경우 kubeconfig의 `server`를 노드의 tailnet IP로 두고, k3s `--tls-san`에 해당 tailnet IP를 추가합니다(이것은 공인 노출이 아니므로 허용 가능한 변경입니다).
+**tls-san 변경이 필요 없었던 이유** (원래 계획과 다른 지점): k3s 서빙
+인증서 SAN에 노드 호스트네임(`DNS:aporiax-instance`)이 기본 포함돼 있고,
+tailnet 장비명이 호스트네임과 동일해 MagicDNS 단축명이 그대로 SAN과
+일치합니다. 그래서 kubeconfig `server`를 IP가 아닌
+`https://aporiax-instance:6443`으로 두면 인증서 변경·k3s 재시작 없이
+검증이 통과합니다 (`kubectl get nodes` 실측 성공). tailnet **IP**로
+붙는 경우에만 `--tls-san` 추가가 필요합니다 — SAN에 `100.69.52.25`는
+없음(openssl 실측).
 
-다만 운영자가 소수이고 변경 빈도가 낮은 현재 단계에서는 **B로 시작하고, 운영 인원이 늘거나 접근 빈도가 높아지면 C로 승격**하는 것을 권장합니다.
+방식 B(SSH 터널)는 tailnet 장애 시 폴백으로 유지합니다. 아래 절차 서술은
+방식 B 기준 그대로 둡니다(폴백 경로 문서로서 유효).
 
 ## 절차 (방식 B 기준)
 
