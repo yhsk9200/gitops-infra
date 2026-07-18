@@ -19,15 +19,15 @@ Unhealthy에 머문다("머지 = 배포"는 여기서도 예외 없음).
       `aporiax-instance`=`100.69.52.25`, NAS `yhs-ds920`=`100.69.142.125`,
       3자 상호 ping 성공(노드 경로는 DERP — 직결 승격은 Security List UDP
       41641 개방 시). kubeconfig 방식 C 전환 완료(노드 무변경 — 런북 0.4).
-- [ ] **2. NAS에 MinIO 기동** — 127.0.0.1 바인딩 + tailscaled userspace
-      인바운드 프록시(NAS에 TUN 부재 실측 — 공인·LAN 비노출, tailnet 접근은
-      유지. ADR-0008의 tailnet-only 조건 충족, 런북 1.1 정정 참조).
-      `mlflow-artifacts` 버킷 생성 + MLflow 전용 access key 1쌍 발급(버킷
-      한정 정책 — 런북 1.2의 mlflow-rw). 발급된 키는 **비밀번호 관리자에
-      즉시 보관**. (런북 Step 1.1~1.2)
-- [ ] **3. 클러스터 → tailnet 경유 S3 접근 실측** — 무인증 health 200 +
-      전용 키로 버킷 ls, 2단계 검증(런북 1.3). 이때 쓴 NAS tailnet IP가
-      다음 단계의 실측값이다.
+- [x] **2. NAS에 MinIO 기동** — ✅ 2026-07-18 완료: 127.0.0.1 바인딩 +
+      tailscaled userspace 인바운드 프록시(TUN 부재 실측 — 런북 1.1 정정),
+      이미지 핀 RELEASE.2025-09-07T16-13-09Z, `mlflow-artifacts` 버킷 생성.
+      MLflow 전용 키(mlflow-rw 정책)는 발급 여부 확인 후 3단계 인증
+      테스트에서 검증 — 키는 **비밀번호 관리자에 즉시 보관**.
+- [ ] **3. 클러스터 → tailnet 경유 S3 접근 실측** — 연결성은 ✅ 완료
+      (2026-07-18: Mac→tailnet 200, LAN 차단 확인, **클러스터 파드→MinIO
+      HTTP 200** — MLflow가 쓸 체인 전 구간 실측). 잔여: mlflow 전용 키로
+      `s3 ls` 인증 테스트(런북 1.3의 (2) — 시크릿이라 운영자 직접 실행).
 - [ ] **4. mlflow_db 생성 (one-off)** — 기존 postgres PVC 세대에는 차트
       initdb가 다시 돌지 않으므로 수동 생성이 필요하다. 재구축(cluster-rebuild-runbook)
       때는 이 단계가 빠지지 않도록 런북에 단계 추가가 필요하다는 점을 메모해 둔다.
