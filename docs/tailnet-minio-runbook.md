@@ -115,13 +115,15 @@ docker run -d --restart unless-stopped --name minio \
   -e MINIO_ROOT_USER='<루트 계정 — 비밀번호 관리자에서 생성>' \
   -e MINIO_ROOT_PASSWORD='<루트 비밀번호 — 동일>' \
   -v /volume1/docker/minio/data:/data \
-  minio/minio:<RELEASE.YYYY-MM-DD... 태그> \
+  minio/minio:RELEASE.2025-09-07T16-13-09Z \
   server /data --console-address ":9001"
 ```
 
-- **이미지 태그는 pull 시점의 구체 RELEASE 태그로 핀**하고 이 문서에 기록할 것
-  (`latest` 금지 — 레포 전반의 핀 원칙과 동일). 참고: 2025년 이후 community
-  이미지는 웹 콘솔 기능이 대부분 제거됨 — 관리는 아래 `mc` CLI 기준.
+- **핀 태그 = `RELEASE.2025-09-07T16-13-09Z`** (2026-07-18 Docker Hub 실측 —
+  community 최신. `latest` 금지는 레포 전반의 핀 원칙과 동일). DS920+
+  J4125에서 `illegal instruction`이 나오면 동일 버전의 `-cpuv1` 태그로 폴백.
+  참고: 2025년 이후 community 이미지는 웹 콘솔 기능이 대부분 제거됨 —
+  관리는 아래 `mc` CLI 기준.
 - 루트 자격증명은 생성 즉시 비밀번호 관리자로. 쉘 히스토리 주의
   (platform-mlops-setup.md 4단계와 동일한 요령).
 - **재부팅 함정**: tailnet IP 바인딩은 컨테이너 시작 시점에 Tailscale이 떠
