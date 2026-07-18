@@ -111,7 +111,7 @@ kubeseal --fetch-cert \
 **값 생성** (특수문자 이슈 회피 위해 영숫자 권장):
 
 ```bash
-gen() { tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "${1:-32}"; echo; }
+gen() { LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "${1:-32}"; echo; }  # LC_ALL=C: macOS UTF-8 로케일에서 tr 실패 방지
 POSTGRES_PW=$(gen 32)
 KEYCLOAK_PW=$(gen 32)      # postgres-db-secret + keycloak-db-secret 공유
 KEYCLOAK_ADMIN_PW=$(gen 32)
