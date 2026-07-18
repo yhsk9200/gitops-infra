@@ -132,8 +132,10 @@ kubectl config current-context                       # 확인 습관: oci-platfo
       - 방법 B) `build-mlflow-image.yaml` 워크플로우가 먼저 main에 올라간
         뒤(이 선작업 PR과 별도, 혹은 같은 PR 머지 직후) `workflow_dispatch`로
         수동 실행
-- [ ] **8. PR ready → CI 3종 green 확인 → 머지** (머지 = 배포).
-- [ ] **9. 배포 후 검증**:
+- [x] **8. PR ready → CI 3종 green 확인 → 머지** — ✅ 2026-07-19 완료: 활성화
+      PR #37 + 사고 복구 3건(#38 빈 비밀번호 실링, #39 비밀번호 불일치 →
+      실링 전 검증 도입, #40 allowed-hosts + S3 키 재실링).
+- [x] **9. 배포 후 검증** — ✅ 2026-07-19 전 항목 실측 통과:
       - ArgoCD app `platform-mlops-mlflow`가 Healthy/Synced인지 확인
       - `kubectl port-forward svc/mlflow -n platform-mlops 5000:5000` 후
         `curl localhost:5000/health` → 200
@@ -142,7 +144,10 @@ kubectl config current-context                       # 확인 습관: oci-platfo
       - S3 전용 키 인증 검증(3단계 잔여 통합): platform-mlops 네임스페이스에
         `envFrom: secretRef mlflow-secret` 파드(amazon/aws-cli)를 띄워
         `s3 ls s3://mlflow-artifacts` — 시크릿을 화면에 노출하지 않고 검증
-- [ ] **10. 백업 확장 검증** — `scripts/platform-backup.sh` 실행 후 결과
+      - 실측 기록: Synced/Healthy·재시작 0·/health 200·smoke run(EXP 1,
+        RUN a23bd104…) 아티팩트 47B가 MinIO 버킷 `1/<run>/artifacts/smoke.txt`
+        로 반영, envFrom 파드 s3 ls 인증 통과
+- [x] **10. 백업 확장 검증** — ✅ 2026-07-19 노드에서 실행: keycloak_db·mlflow_db dump + pg_restore --list + checksums 통과. `scripts/platform-backup.sh` 실행 후 결과
       backup set에 `mlflow_db.dump`가 포함돼 있는지 확인.
 
 ## 이 선작업 PR에 포함되지 않은 것
