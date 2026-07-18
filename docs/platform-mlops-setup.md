@@ -83,9 +83,12 @@ kubectl config current-context                       # 확인 습관: oci-platfo
   > 실링**되고, 배포 후 `fe_sendauth: no password supplied` CrashLoop으로
   > 나타난다. 값은 아래처럼 직접 입력받고 **길이 확인**을 거친다.
 
-  > **실링 전 로그인 검증 (2차 사고 후 추가)**: 저장·붙여넣기 불일치로
-  > "password authentication failed"가 실링된 사례가 있었다. 실링 직전에
-  > 반드시 그 값으로 실제 DB 로그인을 검증한다 — 통과한 값만 실링:
+  > **실링 전 로그인 검증 (2차·3차 사고 후 추가)**: 저장·붙여넣기 불일치로
+  > DB는 "password authentication failed"(2차), S3는 "SignatureDoesNotMatch"
+  > (3차)가 실링된 사례가 있었다. **두 값 모두** 실링 직전에 실제 인증을
+  > 검증하고, 통과한 문자열을 같은 셸에서 그대로 실링한다. S3 검증은 mc
+  > 컨테이너에서 `mc alias set chk http://100.69.142.125:9000 mlflow "$SK"
+  > && mc ls chk/mlflow-artifacts`. DB 검증:
   > ```
   > kubectl exec -i platform-db-postgres-postgresql-0 -n platform-db -c postgresql -- \
   >   env PGPASSWORD="$MLFLOW_DB_PW" psql -U mlflow_admin -d mlflow_db -t -c 'SELECT 1;'
