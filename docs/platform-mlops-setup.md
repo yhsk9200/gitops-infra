@@ -28,39 +28,77 @@ Unhealthy에 머문다("머지 = 배포"는 여기서도 예외 없음).
       (2026-07-18: Mac→tailnet 200, LAN 차단 확인, **클러스터 파드→MinIO
       HTTP 200** — MLflow가 쓸 체인 전 구간 실측). 잔여: mlflow 전용 키로
       `s3 ls` 인증 테스트(런북 1.3의 (2) — 시크릿이라 운영자 직접 실행).
+**실행 위치 (4·5 공통)**: OCI 노드에 SSH 불필요 — `kubectl exec`는
+원격 클라이언트 명령이라 **Mac 터미널**에서 실행한다(kubectl이 API 서버에
+"그 파드 안에서 이 명령을 실행해달라"고 요청하는 구조). 단 아래 두 전제가
+빠지면 실패한다:
+
+```bash
+cd ~/projects/gitops-infra                          # 5단계 출력 경로가 상대경로라 레포 루트 필수
+export KUBECONFIG=~/.kube/oci-platform-tailnet.yaml  # 기본 컨텍스트는 orbstack(로컬) — 명시 안 하면 엉뚱한 클러스터로 감
+kubectl config current-context                       # 확인 습관: oci-platform-tailnet 이어야 함
+```
+
 - [ ] **4. mlflow_db 생성 (one-off)** — 기존 postgres PVC 세대에는 차트
       initdb가 다시 돌지 않으므로 수동 생성이 필요하다. 재구축(cluster-rebuild-runbook)
       때는 이 단계가 빠지지 않도록 런북에 단계 추가가 필요하다는 점을 메모해 둔다.
 
   ```bash
+  # (위 cd/export 실행된 셸에서 이어서)
+  gen() { tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "${1:-32}"; echo; }
+  MLFLOW_DB_PW=$(gen 32)                               # cluster-rebuild-runbook과 동일 생성 방식
+
+  POSTGRES_PW="$(kubectl get secret postgres-db-secret -n platform-db \
+    -o jsonpath='{.data.postgres-password}' | base64 -d)"
+
   kubectl exec -it platform-db-postgres-postgresql-0 -n platform-db -c postgresql -- \
-    env PGPASSWORD='<postgres-password from postgres-db-secret>' psql -U postgres -c \
-    "CREATE USER mlflow_admin WITH PASSWORD '<비밀번호 관리자에서 신규 생성>';" -c \
+    env PGPASSWORD="$POSTGRES_PW" psql -U postgres -c \
+    "CREATE USER mlflow_admin WITH PASSWORD '$MLFLOW_DB_PW';" -c \
     "CREATE DATABASE mlflow_db OWNER mlflow_admin;"
+
+  unset POSTGRES_PW
+  echo "$MLFLOW_DB_PW"    # ← 이 값을 비밀번호 관리자에 즉시 저장 (5단계에서 재사용)
   ```
 
-  평문 비밀번호는 비밀번호 관리자에만 남긴다 — 위 명령을 쉘 히스토리에 그대로
-  남기지 않도록 주의(새 셸, 히스토리 무시 옵션, 또는 실행 후 즉시 히스토리
-  삭제 중 편한 방법으로).
+  `postgres-db-secret`의 `postgres-password`는 `scripts/platform-backup.sh`가
+  이미 같은 방식으로 읽는 값 — 신규 발급이 아니라 기존 값을 그대로 쓴다.
+  `MLFLOW_DB_PW`는 이번에 새로 발급하는 값이라 비밀번호 관리자 저장이 필요.
+  평문을 쉘 히스토리에 남기지 않도록 주의(새 셸, 히스토리 무시 옵션, 또는
+  실행 후 즉시 히스토리 삭제 중 편한 방법으로).
 
 - [ ] **5. mlflow-secret SealedSecret 생성** — namespace `platform-mlops`,
       keys:
-      - `MLFLOW_BACKEND_STORE_URI` = `postgresql://mlflow_admin:<pw>@platform-db-postgres-postgresql.platform-db.svc.cluster.local:5432/mlflow_db`
-      - `AWS_ACCESS_KEY_ID` = (2단계에서 발급한 MinIO access key)
-      - `AWS_SECRET_ACCESS_KEY` = (2단계에서 발급한 MinIO secret key)
+      - `MLFLOW_BACKEND_STORE_URI` = `postgresql://mlflow_admin:<$MLFLOW_DB_PW>@platform-db-postgres-postgresql.platform-db.svc.cluster.local:5432/mlflow_db`
+      - `AWS_ACCESS_KEY_ID` = `mlflow` (런북 1.2에서 만든 사용자명)
+      - `AWS_SECRET_ACCESS_KEY` = (런북 1.2에서 발급한 MinIO secret key)
+
+  같은 셸에서 이어서 — `kubeseal`은 컨트롤러 공개키를 먼저 파일로 받아두는
+  레포 관례(`cluster-rebuild-runbook.md` 3.3)를 따른다. `pub-cert.pem`은
+  공개키라 민감하지 않지만 `.gitignore` 대상(레포 루트에 임시로만 둠):
 
   ```bash
+  kubeseal --fetch-cert \
+    --controller-name=sealed-secrets-controller \
+    --controller-namespace=platform-system \
+    > pub-cert.pem
+
+  read -rs MINIO_SK    # 런북 1.2에서 발급한 mlflow secret key 붙여넣고 엔터 (화면에 안 보임)
+
   kubectl create secret generic mlflow-secret \
     --namespace platform-mlops --dry-run=client -o yaml \
-    --from-literal=MLFLOW_BACKEND_STORE_URI='postgresql://mlflow_admin:<pw>@platform-db-postgres-postgresql.platform-db.svc.cluster.local:5432/mlflow_db' \
-    --from-literal=AWS_ACCESS_KEY_ID='<access-key>' \
-    --from-literal=AWS_SECRET_ACCESS_KEY='<secret-key>' \
-    | kubeseal --format yaml \
+    --from-literal=MLFLOW_BACKEND_STORE_URI="postgresql://mlflow_admin:${MLFLOW_DB_PW}@platform-db-postgres-postgresql.platform-db.svc.cluster.local:5432/mlflow_db" \
+    --from-literal=AWS_ACCESS_KEY_ID='mlflow' \
+    --from-literal=AWS_SECRET_ACCESS_KEY="$MINIO_SK" \
+    | kubeseal --cert pub-cert.pem --format yaml \
     > manifests/security/mlflow-sealed-secret.yaml
+
+  unset MINIO_SK MLFLOW_DB_PW
+  rm pub-cert.pem
   ```
 
-  결과 파일을 커밋한다. 암호화된 결과물만 git에 들어간다는 점은 기존
-  SealedSecret들과 동일 — 평문은 이 저장소 어디에도 남기지 않는다.
+  결과 파일(`manifests/security/mlflow-sealed-secret.yaml`)을 git add·커밋한다.
+  암호화된 결과물만 git에 들어간다는 점은 기존 SealedSecret들과 동일 — 평문은
+  이 저장소 어디에도 남기지 않는다.
 
 - [x] **6. tailnet IP 치환** — ✅ 2026-07-18 반영: `MLFLOW_S3_ENDPOINT_URL`
       = `http://100.69.142.125:9000` (NAS tailnet IP는 장비 고정이라 MinIO
