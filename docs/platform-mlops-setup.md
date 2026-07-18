@@ -46,7 +46,8 @@ kubectl config current-context                       # 확인 습관: oci-platfo
 
   ```bash
   # (위 cd/export 실행된 셸에서 이어서)
-  gen() { tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "${1:-32}"; echo; }
+  # LC_ALL=C 필수: macOS에서 로케일이 UTF-8이면 tr이 "Illegal byte sequence"로 실패 (2026-07-19 실측)
+  gen() { LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "${1:-32}"; echo; }
   MLFLOW_DB_PW=$(gen 32)                               # cluster-rebuild-runbook과 동일 생성 방식
 
   POSTGRES_PW="$(kubectl get secret postgres-db-secret -n platform-db \
@@ -81,6 +82,14 @@ kubectl config current-context                       # 확인 습관: oci-platfo
   > 말 것 — 다른 셸에서 실행하면 빈 문자열로 치환돼 **빈 비밀번호가 그대로
   > 실링**되고, 배포 후 `fe_sendauth: no password supplied` CrashLoop으로
   > 나타난다. 값은 아래처럼 직접 입력받고 **길이 확인**을 거친다.
+
+  > **실링 전 로그인 검증 (2차 사고 후 추가)**: 저장·붙여넣기 불일치로
+  > "password authentication failed"가 실링된 사례가 있었다. 실링 직전에
+  > 반드시 그 값으로 실제 DB 로그인을 검증한다 — 통과한 값만 실링:
+  > ```
+  > kubectl exec -i platform-db-postgres-postgresql-0 -n platform-db -c postgresql -- \
+  >   env PGPASSWORD="$MLFLOW_DB_PW" psql -U mlflow_admin -d mlflow_db -t -c 'SELECT 1;'
+  > ```
 
   ```bash
   kubeseal --fetch-cert \
