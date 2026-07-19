@@ -86,6 +86,13 @@ grafana:
 
   # Loki는 on-demand(apps-ondemand/, ADR-0004)라 평소엔 미가동.
   # 데이터소스 배선은 유지해 Loki를 띄우면 추가 설정 없이 바로 연결됩니다.
+  #
+  # ADR-0009 연결 계약 ② — 실험 플레인(aporiax-lab, Mac OrbStack VM mlx-1)의
+  # Prometheus를 읽기 단방향 datasource로 연결. 경로는 tailnet(파드 이그레스가
+  # 노드 tailscaled 경유 — MLflow→MinIO@NAS와 동일 패턴). Mac이 꺼져 있으면
+  # 해당 패널만 no data — 간헐 가동이 전제라 정상이며 가용성 알림 금지
+  # 조항(ADR-0009 비연결 명시)에 따라 알림 연동도 하지 않는다.
+  # mlx-1 tailnet IP는 장비 고정(100.105.255.40), NodePort 30090.
   additionalDataSources:
     - name: Loki
       uid: loki
@@ -96,6 +103,13 @@ grafana:
       isDefault: false
       jsonData:
         manageAlerts: false
+    - name: aporiax-lab-prometheus
+      type: prometheus
+      access: proxy
+      url: http://100.105.255.40:30090
+      isDefault: false
+      jsonData:
+        timeInterval: 30s
 
 prometheus:
   prometheusSpec:
