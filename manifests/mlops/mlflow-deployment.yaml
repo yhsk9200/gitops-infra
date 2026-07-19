@@ -58,9 +58,11 @@ spec:
             # localhost+사설 IP뿐이라 서비스 DNS 접근이 403 "Invalid Host
             # header"로 차단됨 (2026-07-19 활성화 검증 실측 — /health는 예외,
             # kubelet probe는 파드 IP라 기본 허용에 걸려 증상이 API 호출에서만
-            # 발현). 클러스터 내 소비자가 쓰는 서비스 DNS 변형들을 허용.
+            # 발현). 주의: 이 옵션은 기본 허용 목록을 **대체**한다(추가 아님,
+            # 2026-07-19 실측 — localhost 미포함 시 port-forward UI가 403).
+            # 서비스 DNS 변형 + port-forward용 localhost를 함께 허용.
             - --allowed-hosts
-            - "mlflow.platform-mlops.svc.cluster.local,mlflow.platform-mlops.svc.cluster.local:5000,mlflow.platform-mlops.svc,mlflow.platform-mlops.svc:5000,mlflow.platform-mlops,mlflow.platform-mlops:5000"
+            - "mlflow.platform-mlops.svc.cluster.local,mlflow.platform-mlops.svc.cluster.local:5000,mlflow.platform-mlops.svc,mlflow.platform-mlops.svc:5000,mlflow.platform-mlops,mlflow.platform-mlops:5000,localhost,localhost:5000,127.0.0.1,127.0.0.1:5000"
           ports:
             - containerPort: 5000
           env:
