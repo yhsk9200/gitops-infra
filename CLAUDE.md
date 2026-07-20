@@ -116,9 +116,9 @@ Mac(M5 Pro 18코어/48GB, OrbStack)에 **완전 격리 k3s 실험 클러스터**
 0. **tailnet 편입** — ✅ **완료** (2026-07-18 검증): 노드 `aporiax-instance`=`100.69.52.25`, NAS `yhs-ds920`=`100.69.142.125`, 3자 ping 성공. **방식 C kubectl 전환 완료** — `~/.kube/oci-platform-tailnet.yaml`, server는 `https://aporiax-instance:6443`(MagicDNS 단축명=인증서 SAN의 호스트네임이라 **tls-san 불필요**했음. IP 접속만 SAN 부재). INPUT REJECT 가설은 기각 — tailscaled ts-input이 자체 ACCEPT. 노드 경로는 DERP 릴레이(직결 승격 = Security List UDP 41641 개방, 아티팩트 전송 전 권장). 런북 `docs/tailnet-minio-runbook.md` 정정 반영됨
 1. **MinIO@NAS** (수동): tailnet 전용 바인딩·버킷 생성 → 클러스터에서 S3 접근 실측 (0008 Phase A 잔여) — 같은 런북 Step 1 (버킷 한정 mlflow-rw 정책, 파드 내 MagicDNS 불가라 IP 사용)
 2. **MLflow 배포** (GitOps, 이 레포): mlflow_db·SealedSecret·proxied artifacts·백업 런북/스크립트 확장 (0008 Phase B) — **선작업 완료** (2026-07-16, 브랜치 `feat/platform-mlops-mlflow`): 커스텀 이미지(공식 이미지 psycopg2·boto3 부재 실측 → GHCR 베이킹, pin 2.9.12/1.43.49 빌드·기동·/health 검증 완료)·Application(wave 3)·Deployment(Recreate, --workers 2, 512Mi limit)·백업 확장. **머지 = 배포이므로 활성화 체크리스트(`docs/platform-mlops-setup.md`) 완료 전 머지 금지** — SealedSecret·NAS IP 치환·이미지 선빌드가 머지 전 수동 단계 → **✅ 배포·검증 완료** (2026-07-19): PR #37 활성화, 사고 복구 3건(#38 빈 비밀번호 실링 · #39 불일치 → 실링 전 SELECT 1/mc ls 검증 절차 도입 · #40 MLflow 3.x allowed-hosts 403 + S3 키 재실링). 스모크 실측: run 기록 + 아티팩트 버킷 반영 + envFrom S3 인증 통과. 다음은 실행계획 3(Mac 클러스터 부트스트랩)·4(Grafana datasource)
-3. **Mac 클러스터 부트스트랩** (2와 병렬 가능): 실험 레포 생성 → OrbStack VM + k3s(server 1, 이후 agent 증설) → Mac Prometheus
-4. **연결 계약 이행**: OCI Grafana에 Mac Prometheus datasource 추가(이 레포 PR) + Mac→MLflow 기록 실측 (2·3 완료 후)
-5. **실험 스택**: LLM 게이트웨이/RAG/eval + 호스트 네이티브 추론 하이브리드, 멀티노드 스케줄링 실험
+3. **Mac 클러스터 부트스트랩** — ✅ 완료 (2026-07-19): 실험 레포 [aporiax-lab](https://github.com/yhsk9200/aporiax-lab)(public) 생성, OrbStack VM `mlx-1`(tailnet 100.105.255.40) + k3s v1.32.13(prod 패리티), Mac Prometheus(kube-prometheus-stack 83.6.0, grafana/AM 비활성 — 관측은 OCI Grafana가 datasource로)
+4. **연결 계약 이행** — ✅ 완료: 계약 ②(PR #43, 2026-07-19) OCI Grafana에 aporiax-lab-prometheus datasource(ConfigMap·sidecar 리로드 실측) · 계약 ③(PR #44, 2026-07-20) MLflow NodePort 30500(tailnet 전용)+allowed-hosts → Mac eval Job이 OCI MLflow에 run·metric·results.json 기록, NAS 버킷 물리 존재까지 실측
+5. **실험 스택** — 진행 중: S1 Open WebUI+호스트 Ollama(✅ 07-19) · S2 LiteLLM 게이트웨이 4모델(✅ 07-20) · S3 eval 루프+계약 ③(✅ 07-20, pass_rate 1.0/10문항). 다음: RAG/벡터 DB 또는 모델 비교 슬라이스. 상세는 aporiax-lab `docs/llm-slice-plan.md`
 
 ## 주요 파일 맵
 
