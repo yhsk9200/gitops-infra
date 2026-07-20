@@ -60,9 +60,10 @@ spec:
             # kubelet probe는 파드 IP라 기본 허용에 걸려 증상이 API 호출에서만
             # 발현). 주의: 이 옵션은 기본 허용 목록을 **대체**한다(추가 아님,
             # 2026-07-19 실측 — localhost 미포함 시 port-forward UI가 403).
-            # 서비스 DNS 변형 + port-forward용 localhost를 함께 허용.
+            # 서비스 DNS 변형 + port-forward용 localhost를 함께 허용. Mac 실험
+            # 클러스터 eval 잡용 노드 tailnet IP:30500도 포함(ADR-0009 계약 ③).
             - --allowed-hosts
-            - "mlflow.platform-mlops.svc.cluster.local,mlflow.platform-mlops.svc.cluster.local:5000,mlflow.platform-mlops.svc,mlflow.platform-mlops.svc:5000,mlflow.platform-mlops,mlflow.platform-mlops:5000,localhost,localhost:5000,127.0.0.1,127.0.0.1:5000"
+            - "mlflow.platform-mlops.svc.cluster.local,mlflow.platform-mlops.svc.cluster.local:5000,mlflow.platform-mlops.svc,mlflow.platform-mlops.svc:5000,mlflow.platform-mlops,mlflow.platform-mlops:5000,localhost,localhost:5000,127.0.0.1,127.0.0.1:5000,100.69.52.25:30500,100.69.52.25"
           ports:
             - containerPort: 5000
           env:
