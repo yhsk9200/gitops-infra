@@ -1,5 +1,6 @@
 # 로컬 전용 / 머신 경로 포함 — 공개 레포에서 제외
 CLAUDE.local.md
+CLAUDE.md
 *.fablize-bak.*
 
 # Terraform (ADR-0005 — 향후 terraform/ 추가 시 평문 비밀·state 유출 방지)
