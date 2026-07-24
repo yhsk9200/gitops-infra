@@ -13,3 +13,11 @@ metadata:
   labels:
     app.kubernetes.io/part-of: product-routine
     app.kubernetes.io/managed-by: argocd
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: product-forecast
+  labels:
+    app.kubernetes.io/part-of: product-forecast
+    app.kubernetes.io/managed-by: argocd
