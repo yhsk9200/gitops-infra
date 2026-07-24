@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: product-forecast
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+spec:
+  description: "aporiax-forecast MLOps 제품 테넌트 — 첫 ML 워크로드 테넌트 (ADR-0010)"
+  sourceRepos:
+    - https://github.com/yhsk9200/aporiax-forecast.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: product-forecast
+  # No cluster-scoped resources needed — omitting this list denies them by
+  # default (opposite default from namespaceResourceWhitelist below).
+  clusterResourceWhitelist: []
+  # pulse(web 테넌트)보다 넓은 화이트리스트 — ML 워크로드(학습 CronJob·서빙·관측)가
+  # 필요로 하는 kind만 명시 추가. Ingress는 불허(서빙 비노출, ADR-0010). 빈
+  # 화이트리스트=전부 허용이라 Application 탈출 위험(ADR-0007).
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ServiceAccount        # 파드 실행 주체
+    - group: ""
+      kind: Service               # 서빙(클러스터 내부 노출)
+    - group: ""
+      kind: ConfigMap             # 학습/서빙 설정
+    - group: apps
+      kind: Deployment            # 서빙
+    - group: batch
+      kind: CronJob               # 학습 스케줄
+    - group: batch
+      kind: Job                   # CronJob이 생성 + 수동 재학습
+    - group: monitoring.coreos.com
+      kind: ServiceMonitor        # 서빙 메트릭 스크레이프

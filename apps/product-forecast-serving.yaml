@@ -1,0 +1,24 @@
+# aporiax-forecast의 deploy/manifests 동기(ADR-0010). C1은 ServiceAccount만,
+# C2/D1에서 학습·서빙 추가
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: product-forecast-serving
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: product-forecast
+  source:
+    repoURL: https://github.com/yhsk9200/aporiax-forecast.git
+    targetRevision: main
+    path: deploy/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: product-forecast
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
