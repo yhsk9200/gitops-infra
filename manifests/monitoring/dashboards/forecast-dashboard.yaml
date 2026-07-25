@@ -1,0 +1,211 @@
+# =============================================================================
+# telemetry-forecaster 대시보드 (ADR-0010 D2)
+# =============================================================================
+# Grafana 사이드카(kube-prometheus-stack, searchNamespace: ALL)가 라벨
+# grafana_dashboard: "1"이 붙은 ConfigMap을 찾아 자동 로딩한다. 데이터 키가
+# 파일명이 되므로 *.json으로 둔다.
+#
+# 소유가 gitops-infra인 이유: Grafana는 플랫폼 자산이고, 이 대시보드는
+# forecast-rules.yaml의 recording rule(forecast:abs_error_mb 등)을 소비한다 —
+# 룰과 대시보드가 같은 정의를 공유하므로 함께 두는 게 응집도가 높다.
+# 이 레포의 첫 커스텀 대시보드이며 manifests/monitoring/dashboards/ 관례를 만든다.
+#
+# 핵심 패널은 "예측 vs 실측 겹침"이다. 서빙은 t 시점에 t+30m을 예측하므로,
+# 같은 시각선에 놓고 비교하려면 예측 series에 offset 30m을 걸어 30분 전
+# 예측을 지금 실측과 맞춘다.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: forecast-dashboard
+  namespace: platform-monitoring
+  labels:
+    grafana_dashboard: "1"
+    app.kubernetes.io/part-of: platform-infra
+data:
+  forecast.json: |
+    {
+      "uid": "telemetry-forecaster",
+      "title": "Telemetry Forecaster — 예측 vs 실측",
+      "tags": ["mlops", "forecast"],
+      "editable": true,
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "1m",
+      "time": { "from": "now-6h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "type": "timeseries",
+          "title": "노드 메모리 — 예측(30분 전 생성) vs 실측",
+          "description": "예측 series에 offset 30m을 걸어 '30분 전에 지금을 예측한 값'을 현재 실측과 같은 시각선에 놓는다. persistence 베이스라인은 예측=당시 현재값.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 9, "w": 16, "x": 0, "y": 0 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "decmbytes",
+              "custom": { "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "persistence 베이스라인" },
+                "properties": [
+                  { "id": "custom.lineStyle", "value": { "dash": [6, 6], "fill": "dash" } },
+                  { "id": "custom.lineWidth", "value": 1 }
+                ]
+              }
+            ]
+          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "forecast:actual_mb",
+              "legendFormat": "실측"
+            },
+            {
+              "refId": "B",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "avg(forecast_node_memory_mb{horizon=\"30m\"} offset 30m)",
+              "legendFormat": "예측 (30분 전 생성)"
+            },
+            {
+              "refId": "C",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "avg(forecast_baseline_mb offset 30m)",
+              "legendFormat": "persistence 베이스라인"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "배포된 모델 버전 (이미지에 baked)",
+          "description": "서빙 이미지에 구워진 MLflow model version. 승격 PR 머지로만 바뀐다.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 4, "w": 8, "x": 16, "y": 0 },
+          "options": {
+            "textMode": "name",
+            "colorMode": "none",
+            "graphMode": "none",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "max by (version) (forecast_model_info)",
+              "legendFormat": "v{{version}}",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "1시간 MAE (모델)",
+          "description": "드리프트 알림은 이 값이 100MB를 넘고 동시에 베이스라인 오차의 1.5배를 초과할 때 발화.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 5, "w": 8, "x": 16, "y": 4 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "decmbytes",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 100 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "avg_over_time(forecast:abs_error_mb[1h])",
+              "legendFormat": "MAE 1h"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "type": "timeseries",
+          "title": "절대 오차 — 모델 vs persistence 베이스라인",
+          "description": "모델 선이 베이스라인 선 아래에 있어야 모델이 부가가치를 낸다.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "decmbytes",
+              "custom": { "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" }
+            },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "forecast:abs_error_mb",
+              "legendFormat": "모델"
+            },
+            {
+              "refId": "B",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "forecast:baseline_abs_error_mb",
+              "legendFormat": "베이스라인"
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "1시간 이동 MAE + 드리프트 임계",
+          "description": "드리프트 조건: MAE(1h) > 100MB AND MAE(1h) > 1.5 × 베이스라인 MAE(1h), 10분 지속.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "decmbytes",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 0,
+                "showPoints": "never",
+                "thresholdsStyle": { "mode": "line" }
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 100 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "avg_over_time(forecast:abs_error_mb[1h])",
+              "legendFormat": "모델 MAE 1h"
+            },
+            {
+              "refId": "B",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "1.5 * avg_over_time(forecast:baseline_abs_error_mb[1h])",
+              "legendFormat": "베이스라인 MAE 1h × 1.5 (발화선)"
+            }
+          ]
+        }
+      ]
+    }
