@@ -112,7 +112,22 @@ grafana:
         timeInterval: 30s
 
 prometheus:
+  # 알림 메시지의 Source 링크(generatorURL)를 실제로 열 수 있게 하기 위한 노출.
+  # externalUrl을 지정하지 않으면 operator가 ClusterIP 서비스 주소를 기본값으로
+  # 채우고, Prometheus는 그 값을 각 알림의 generatorURL로 붙인다. 그러면 텔레그램에
+  # 찍히는 Source가 클러스터 밖에서 해석 불가능한 주소가 되어 알림에서 쿼리로
+  # 넘어갈 수 없다(2026-07-25 첫 실알림에서 확인).
+  #
+  # 노출 경로는 tailnet 전용 NodePort — MLflow(30500)와 같은 패턴이다. Oracle
+  # 방화벽이 공인 경로를 막고 tailscaled가 tailnet 인입만 통과시키는 것을 실측
+  # 확인했다(공인 IP:30500 무응답 / tailnet IP:30500 200). 공개 Ingress는 인증
+  # 없는 Prometheus를 노출하게 되므로 채택하지 않는다.
+  service:
+    type: NodePort
+    nodePort: 30900
   prometheusSpec:
+    externalUrl: http://100.69.52.25:30900
+
     # 12GB 단일 노드 리핏(ADR-0004): retention/메모리/스토리지를 축소.
     # 메트릭은 lean하게 상시 가동(라이브 모니터링 유지), 로그(Loki/Alloy)는 on-demand.
     retention: 5d
