@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-monitoring-dashboards
+  namespace: argocd
+  annotations:
+    # Grafana 사이드카는 wave 3(kube-prometheus-stack)에서 뜬다. 사이드카는
+    # ConfigMap을 상시 감시하므로 순서가 어긋나도 나중에 집어가지만, 룰과
+    # 동일한 wave로 맞춰 의도를 명시한다.
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: platform-infra
+  source:
+    repoURL: "https://github.com/yhsk9200/gitops-infra.git"
+    targetRevision: main
+    path: manifests/monitoring/dashboards
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: platform-monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

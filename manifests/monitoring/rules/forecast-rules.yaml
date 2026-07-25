@@ -1,0 +1,72 @@
+# =============================================================================
+# telemetry-forecaster 품질 룰 (ADR-0010 D2)
+# =============================================================================
+# 소유가 여기인 이유: 알림 라우팅은 플랫폼 관심사(ADR-0010 결정 6). 테넌트
+# 레포는 학습/서빙 워크로드만 소유하고, 알림은 기존 룰·Telegram 라인과 동거한다.
+#
+# 정렬 방식: 서빙은 시점 t에 "t+30m의 값"을 예측해 forecast_node_memory_mb로
+# 노출한다. 따라서 시점 t의 예측 오차를 보려면 30분 전 예측값과 지금 실측을
+# 비교해야 한다 → `offset 30m`. 서빙이 뜬 뒤 첫 30분은 비교 대상이 없어
+# 오차 series가 생성되지 않는다(정상).
+#
+# 드리프트 기준을 절대값 하나로 두지 않은 이유: 모델이 "얼마나 틀렸나"보다
+# "여전히 아무것도 안 하는 것보다 나은가"가 재학습 판단에 직결된다. 그래서
+# persistence 베이스라인(예측=현재값) 오차와 비교하는 자기교정 기준을 쓴다.
+# 절대 하한 100MB는 두 오차가 모두 작을 때의 잡음 발화를 막는 장치 —
+# v1 학습 시 실측 MAE 56MB, 베이스라인 77MB보다 위에 둔 값이다.
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: forecast-rules
+  namespace: platform-monitoring
+  labels:
+    app.kubernetes.io/part-of: platform-infra
+spec:
+  groups:
+    - name: forecast.recording
+      interval: 1m
+      rules:
+        # 실측(MB) — 학습·서빙이 쓰는 것과 같은 표현식
+        - record: forecast:actual_mb
+          expr: avg(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1e6
+
+        # 모델 절대 오차: |실측(t) - 30분 전에 t를 예측한 값|
+        - record: forecast:abs_error_mb
+          expr: abs(forecast:actual_mb - avg(forecast_node_memory_mb{horizon="30m"} offset 30m))
+
+        # 같은 방식의 persistence 베이스라인 오차 — 모델의 부가가치 측정 기준
+        - record: forecast:baseline_abs_error_mb
+          expr: abs(forecast:actual_mb - avg(forecast_baseline_mb offset 30m))
+
+    - name: forecast.quality
+      rules:
+        - alert: ForecastModelDrift
+          expr: |
+            avg_over_time(forecast:abs_error_mb[1h]) > 100
+            and
+            avg_over_time(forecast:abs_error_mb[1h]) > 1.5 * avg_over_time(forecast:baseline_abs_error_mb[1h])
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "telemetry-forecaster 예측이 현실과 어긋남(드리프트)"
+            description: "최근 1시간 평균 절대오차가 100MB를 넘고, persistence 베이스라인 오차의 1.5배를 초과했습니다 — 모델이 '현재값 반복'보다 못한 상태입니다. 재학습/재승격을 검토하세요."
+
+        - alert: ForecastServingStale
+          expr: absent(forecast_node_memory_mb{horizon="30m"})
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "telemetry-forecaster 예측 메트릭 없음"
+            description: "15분 이상 예측 series가 수집되지 않았습니다. 서빙 파드·Service·ServiceMonitor를 확인하세요."
+
+        - alert: ForecastPredictionFailing
+          expr: max(forecast_scrape_error) > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "telemetry-forecaster가 예측을 만들지 못함"
+            description: "서빙은 살아 있으나 스크레이프 시점 예측 계산이 15분 이상 실패했습니다(특징 생성용 Prometheus 조회 실패 등). 파드 로그를 확인하세요."
