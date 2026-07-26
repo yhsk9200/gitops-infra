@@ -81,8 +81,8 @@ data:
         {
           "id": 2,
           "type": "stat",
-          "title": "배포된 모델 버전 (이미지에 baked)",
-          "description": "서빙 이미지에 구워진 MLflow model version. 승격 PR 머지로만 바뀐다.",
+          "title": "배포된 모델 (이미지에 baked)",
+          "description": "서빙 이미지에 구워진 MLflow 모델의 이름·버전·특징 스키마. 승격 PR 머지로만 바뀐다. 버전 번호만 표시하면 이름이 다른 모델이 같은 v1으로 보여 구분되지 않으므로(실제로 드리프트 시연 중 겪음) 이름과 스키마를 함께 표시한다.",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "gridPos": { "h": 4, "w": 8, "x": 16, "y": 0 },
           "options": {
@@ -95,8 +95,8 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "prometheus" },
-              "expr": "max by (version) (forecast_model_info)",
-              "legendFormat": "v{{version}}",
+              "expr": "max by (model_name, version, feature_set) (forecast_model_info)",
+              "legendFormat": "{{model_name}} v{{version}} · {{feature_set}}",
               "instant": true
             }
           ]
