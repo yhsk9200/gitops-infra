@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-backup
+  namespace: argocd
+  annotations:
+    # postgres(wave 1)와 SealedSecret(wave -1)이 먼저 있어야 한다. 백업은 플랫폼
+    # 서비스를 소비하는 쪽이라 다른 소비자들과 같은 wave에 둔다.
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: platform-infra
+  source:
+    repoURL: "https://github.com/yhsk9200/gitops-infra.git"
+    targetRevision: main
+    path: manifests/backup
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: platform-db
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
