@@ -91,9 +91,10 @@ jobs:
           set -uo pipefail
           IMAGES=(
             "docker.io/bitnamilegacy/keycloak:26.3.3-debian-12-r0"     # helm-values/iam/keycloak-values-{prod,dev}.yaml
-            "docker.io/bitnamilegacy/postgresql:17.6.0-debian-12-r4"   # helm-values/database/postgres-values.yaml
+            "docker.io/bitnamilegacy/postgresql:17.6.0-debian-12-r4"   # helm-values/database/postgres-values.yaml + manifests/backup (pg_dump 버전을 서버와 맞춤 — 옮길 때 두 곳 함께)
             "docker.io/bitnamilegacy/os-shell:12-debian-12-r51"        # helm-values/database/postgres-values.yaml (init/metrics)
             "ghcr.io/yhsk9200/mlflow:v3.6.0-pg1"                       # manifests/mlops/mlflow-deployment.yaml (선빌드 필요 — docs/platform-mlops-setup.md 7단계)
+            "minio/mc:RELEASE.2025-08-13T08-35-41Z"                    # manifests/backup/platform-backup-cronjob.yaml (NAS 반출·checksum 재검증)
           )
           fail=0
           for img in "${IMAGES[@]}"; do
