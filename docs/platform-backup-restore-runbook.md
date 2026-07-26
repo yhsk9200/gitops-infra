@@ -48,6 +48,8 @@ Harbor를 제거한 뒤, 이 플랫폼에서 **재구성이 불가능한 statefu
 
 k3s 서버(또는 kubeconfig가 있는 곳)에서 실행합니다. 스크립트는 **클러스터에 대해 read-only**(pg_dump / get secret)라 언제 실행해도 안전합니다.
 
+단일 노드 환경에서는 **노드가 아닌 곳에서 실행하는 편이 낫습니다** — 노드 디스크에 백업을 쌓으면 노드 소실 시 백업도 함께 사라집니다. tailnet kubeconfig를 가진 운영자 PC에서 실행해 검증했습니다(§13).
+
 ```bash
 # 이 레포를 서버에 checkout 한 경우
 ./scripts/platform-backup.sh                 # 기본 /opt/platform-backups
@@ -239,4 +241,30 @@ NAS 자동 전송 · NFS/SMB PV mount · `CronJob` 원격 백업 · MinIO 백업
 
 | 날짜 | 작업자 | 백업 ID | 백업 결과 | NAS 반출 | 복구 리허설 | 비고 |
 | --- | --- | --- | --- | --- | --- | --- |
-|  |  |  |  |  |  |  |
+| 2026-07-26 | 운영자 | `20260726-230501` | OK — keycloak_db 256K / mlflow_db 84K, checksum 4파일 검증 | 미완 (§13) | OK — 임시 DB restore, `pg_restore` rc=0 / error 0 | 체계 수립 후 **첫 실행**. 발견 사항은 §13 |
+
+## 13. 첫 실행에서 확인한 것 (2026-07-26)
+
+백업 스크립트와 이 런북은 완성돼 있었지만 **한 번도 실행된 적이 없었다**(§12가 빈 표였다). 무검증 절차를 자동화하기 전에 수동으로 전 구간을 돌려 검증했다.
+
+**통과한 것**
+
+- 스크립트가 수정 없이 첫 실행에 성공했다. 세트 구조가 §4 명세와 일치하고 checksum 4파일 전부 재검증됐다.
+- 기록된 `git_commit`이 ArgoCD root Application의 배포 리비전과 정확히 일치했다 — GitOps 기준점이 실제 배포 상태를 가리킨다.
+- 복구 리허설(§10)에서 `pg_restore`가 **플래그 우회 없이** rc=0·error 0으로 복구됐다. 스키마만이 아니라 데이터도 살아났다: keycloak 88테이블(realm 2·user 4·client 14), mlflow 34테이블(experiment 8·registered_model 3·model_version 11·run 18). 리허설 전후 운영 DB 목록이 동일해 비파괴 조건도 지켜졌다.
+
+**오프노드 실행이 가능하고 더 안전하다**
+
+이번 실행은 k3s 서버가 아니라 **tailnet kubeconfig를 가진 운영자 PC에서** 했다(§3이 허용하는 경로). 스크립트가 클러스터에 read-only이므로 동작에 차이가 없고, 단일 노드 환경에서는 이쪽이 낫다 — 노드 디스크에 백업을 쌓으면 노드 소실이라는 지배적 실패 모드에서 백업이 함께 사라진다. 자동화 시 이 점을 반영한다(§2 자동화 범위 개정 예정).
+
+**발견: Harbor 잔재 (ADR-0006 미완 정리)**
+
+- `harbor_registry` 데이터베이스가 남아 있다 — 7.3MB, public 테이블 0개(빈 껍데기).
+- `harbor_admin` role도 남아 있다.
+- `postgres-db-secret`의 `harbor-password` 고아 키는 이미 매니페스트 주석에 이연 항목으로 기록돼 있었다(다음 reseal 때 2키로 재생성).
+
+백업 대상(`BACKUP_DBS`)에는 없으므로 백업·복구의 정합성 문제는 아니다. 다만 폐기된 컴포넌트의 DB와 role이 남아 있는 것은 정리 대상이며, `DROP DATABASE`/`DROP ROLE`은 파괴적 작업이라 별도 승인 후 수행한다. 정리 시 SealedSecret reseal(2키)과 함께 묶는 것이 적절하다.
+
+**미완: NAS 반출**
+
+반출에는 NAS 측 자격증명이 필요해 이번 회차에서는 수행하지 않았다. §7이 전제한 "NAS와 k3s 서버가 완전히 별도 망"은 tailnet 도입 이후 더 이상 사실이 아니다(MLflow가 이미 클러스터에서 MinIO@NAS로 아티팩트를 쓴다). 따라서 반출은 수동 정책을 유지할 이유가 없고, 전용 버킷·자격증명을 갖춰 자동화하는 것이 맞다 — 자동화 작업에서 §2·§7을 함께 개정한다.
