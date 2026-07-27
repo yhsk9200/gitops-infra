@@ -28,13 +28,14 @@ Harbor를 제거한 뒤, 이 플랫폼에서 **재구성이 불가능한 statefu
 
 | 항목 | 정책 |
 | --- | --- |
-| 백업 실행 위치 | k3s 서버 |
-| 1차 저장 | k3s 서버 로컬 디스크 (`/opt/platform-backups`) |
-| 2차 저장 | 망분리 Synology NAS |
-| NAS 반출 | 수동 반출 (§7) |
-| 자동화 범위 | 로컬 백업 세트 생성·검증·retention (`scripts/platform-backup.sh`) |
-| 자동화 보류 | NAS 자동 전송, Kubernetes `CronJob`, NFS/SMB PV mount |
-| 복구 리허설 | 초기 1회, 이후 분기 1회 또는 주요 변경 후 (§10) |
+| 자동 경로 (기본) | in-cluster `CronJob`(`platform-db/platform-backup`), 매일 02:00 KST — 덤프→검증→**MinIO@NAS 반출**→사본 checksum 재검증까지 한 번에 (§14) |
+| 자동 경로 저장 | 노드 디스크를 쓰지 않는다(파드 `emptyDir`만 경유) → 1차 저장이 곧 NAS |
+| 수동 경로 (폴백·리허설용) | `scripts/platform-backup.sh`, **노드가 아닌 곳**에서 실행 권장 (§3) |
+| 수동 경로 저장 | 실행한 기기의 로컬 디스크 (`/opt/platform-backups` 또는 지정 경로) → NAS 반출은 수동 (§7) |
+| NAS 보존 | 자동 경로는 삭제하지 않는다(세트 1개 ≈ 340KB → 연 125MB 수준). NAS측 정리는 별도 관심사 |
+| 복구 리허설 | 초기 1회(완료: §12·§13), 이후 분기 1회 또는 주요 변경 후 (§10) |
+
+두 경로를 함께 두는 이유는 실패 프로필이 다르기 때문이다 — 자동 경로는 클러스터가 살아 있을 때 매일 돌고, 수동 경로는 클러스터 API에 닿을 수 있으면 언제든 오프노드에서 돌 수 있다. 자동 경로만 두면 스케줄러(클러스터) 자체가 단일 실패점이 된다.
 
 운영 백업으로 인정하는 최소 조건:
 
@@ -132,11 +133,13 @@ kubectl get secret -n platform-system \
 - **Git에 절대 커밋하지 않습니다.** 루틴 백업 세트에도 넣지 않습니다.
 - 컨트롤러 키가 변경(reseal)되면 이 백업도 갱신합니다.
 
-## 7. 수동 NAS 반출
+## 7. NAS 반출
 
-NAS와 k3s 서버가 완전히 별도 망이므로 수동 반출을 기본 정책으로 둡니다.
+**자동 경로(기본)**: in-cluster CronJob이 반출까지 수행합니다(§14). 아래 수동 절차는 폴백이며, 클러스터 밖에서 만든 세트(§3)를 올릴 때 씁니다.
 
-권장 반출 시점: 주 1회 · Keycloak/PostgreSQL 주요 변경 후 · 컨트롤러 키 변경 후 · 복구 리허설 전 최신 세트 고정 시.
+> 이 절에는 원래 *"NAS와 k3s 서버가 완전히 별도 망이므로 수동 반출을 기본 정책으로 둔다"* 고 적혀 있었습니다. tailnet 도입 이후 이 전제는 사실이 아닙니다 — MLflow가 이미 클러스터에서 MinIO@NAS로 아티팩트를 씁니다(ADR-0008). 같은 경로를 백업 반출에 재사용하므로 새 신뢰 관계가 늘지 않습니다.
+
+권장 수동 반출 시점: Keycloak/PostgreSQL 주요 변경 후 · 컨트롤러 키 변경 후 · 복구 리허설 전 최신 세트 고정 시.
 
 절차:
 
@@ -267,4 +270,72 @@ NAS 자동 전송 · NFS/SMB PV mount · `CronJob` 원격 백업 · MinIO 백업
 
 **미완: NAS 반출**
 
-반출에는 NAS 측 자격증명이 필요해 이번 회차에서는 수행하지 않았다. §7이 전제한 "NAS와 k3s 서버가 완전히 별도 망"은 tailnet 도입 이후 더 이상 사실이 아니다(MLflow가 이미 클러스터에서 MinIO@NAS로 아티팩트를 쓴다). 따라서 반출은 수동 정책을 유지할 이유가 없고, 전용 버킷·자격증명을 갖춰 자동화하는 것이 맞다 — 자동화 작업에서 §2·§7을 함께 개정한다.
+반출에는 NAS 측 자격증명이 필요해 이번 회차에서는 수행하지 않았다. §7이 전제한 "NAS와 k3s 서버가 완전히 별도 망"은 tailnet 도입 이후 더 이상 사실이 아니다(MLflow가 이미 클러스터에서 MinIO@NAS로 아티팩트를 쓴다). 따라서 반출은 수동 정책을 유지할 이유가 없고, 전용 버킷·자격증명을 갖춰 자동화하는 것이 맞다 → §14로 자동화했다.
+
+## 14. 자동 백업 (in-cluster CronJob)
+
+매니페스트: `manifests/backup/platform-backup-cronjob.yaml`, Application: `apps/platform-backup.yaml`(wave 5).
+
+### 동작
+
+파드 하나가 두 단계로 돈다. 노드 디스크에는 아무것도 남기지 않는다(`emptyDir`만 경유).
+
+1. **initContainer `dump`** — postgres 서버와 **같은 이미지**(pg_dump 메이저 버전 일치). Service로 직접 접속해 `keycloak_db`·`mlflow_db`를 `pg_dump -Fc`로 덤프하고 `pg_restore --list`로 아카이브 유효성을 확인한 뒤 `manifest.yaml`·`checksums.sha256`을 만든다.
+2. **container `export`** — `minio/mc`. 세트를 `nas/platform-backups/<backup_id>/`로 올린 뒤 **되받아 `sha256sum -c`로 재검증**한다(§7의 4단계를 자동화한 것).
+
+API 접근이 필요 없어 서비스어카운트 토큰을 마운트하지 않고, postgres에 `kubectl exec` 대신 Service로 붙으므로 exec 권한도 없다.
+
+자동 경로는 레포 체크아웃이 없어 정확한 GitOps commit을 기록할 수 없다 — `gitops/commit.txt`에 시각으로 커밋을 되찾는 방법을 적어둔다. 정확한 commit이 필요하면 수동 경로(§3)를 쓴다.
+
+### 감시
+
+`manifests/monitoring/rules/platform-rules.yaml`의 `platform.backup` 그룹이 Telegram으로 연결된다.
+
+| 알림 | 조건 | 의미 |
+| --- | --- | --- |
+| `PlatformBackupStale` | 마지막 성공 > 36h | 핵심 룰. 잡 실패·suspend·스케줄러 이상·클러스터 정지까지 한 번에 잡힌다 |
+| `PlatformBackupMissing` | 성공 이력 메트릭 자체가 없음 (26h) | CronJob 삭제/최초 실행 미성공 — Stale이 못 잡는 구멍 |
+| `PlatformBackupJobFailing` | 6h 내 실패 파드 존재 | 재시도로 최종 성공했을 수 있으나 원인 확인용(warning) |
+
+실패 이벤트가 아니라 **staleness**를 핵심으로 삼은 이유는, 재시도가 최종 성공하는 경우에 헛발화하지 않으면서 모든 실패 모드를 한 룰로 덮기 때문이다.
+
+### 최초 설정 (운영자 직접 — 시크릿 경계)
+
+`scripts/setup-backup-nas-credentials.sh` 한 번으로 버킷·최소권한 정책·전용 사용자·SealedSecret이 만들어집니다. **터미널에서 직접 실행하세요** — 비밀번호 입력에 TTY가 필요합니다.
+
+```bash
+export KUBECONFIG=~/.kube/oci-platform-tailnet.yaml
+
+./scripts/setup-backup-nas-credentials.sh --preflight   # 변경 없이 사전 점검만
+./scripts/setup-backup-nas-credentials.sh               # 실제 실행
+```
+
+MinIO 루트 비밀번호를 한 번 물어보는 것이 유일한 입력입니다. 스크립트가 하는 일:
+
+1. 사전 점검(도구·클러스터·sealed-secrets 컨트롤러·MinIO 도달성)
+2. 버킷 `platform-backups` 생성(있으면 재사용)
+3. **최소권한 정책** — 이 버킷에만 `ListBucket`/`GetObject`/`PutObject`. **`DeleteObject`는 주지 않습니다** — 백업 주체가 백업을 지울 수 없어야 합니다. 읽기 권한은 반출 후 checksum 재검증에 필요합니다.
+4. 전용 사용자 `platform-backup` 생성 + 정책 연결 (비밀번호는 스크립트가 생성)
+5. **권한 검증** — 조회·쓰기·읽기가 되는지, **삭제가 막히는지**, **다른 버킷(`mlflow-artifacts`)이 차단되는지**까지 실제로 시험합니다. 의도와 다르면 경고합니다.
+6. SealedSecret을 `manifests/security/platform-backup-nas-sealed-secret.yaml`로 생성
+
+비밀값이 남는 곳을 최소화하도록 설계했습니다 — 생성된 비밀번호를 화면에 찍지 않고, 명령행 인자로도 넘기지 않으며(호스트 `ps` 노출 방지: 컨테이너에는 환경변수, `kubectl`에는 파일로 전달), 평문은 `~/platform-backup-nas.secret`(권한 600) 한 파일에만 기록합니다. 그래서 **AI 에이전트가 이 스크립트를 대신 실행하더라도 비밀값이 대화 기록에 들어가지 않습니다.**
+
+**실행 후 반드시**:
+
+1. `~/platform-backup-nas.secret`의 값을 **패스워드 매니저에 저장** — 이 플랫폼은 컨트롤러 키를 백업하지 않는 대신 "평문으로 재봉인"을 기본 복구 경로로 삼으므로(§6), 사람이 이 값을 보관해야 재구축이 가능합니다.
+2. 저장을 확인했으면 파일 삭제: `rm -P ~/platform-backup-nas.secret`
+3. SealedSecret 커밋·머지 → ArgoCD가 Secret(wave -1)과 CronJob(wave 5)을 동기합니다.
+
+> 기존 사용자의 비밀번호를 교체하려면 `ROTATE=1`을 붙입니다. 새 SealedSecret이 배포되기 전까지 백업 잡이 실패하므로 의도적으로 기본 동작에서 제외했습니다.
+
+**첫 실행은 스케줄(02:00 KST)까지 기다리지 말고 수동 검증**:
+
+```bash
+kubectl create job --from=cronjob/platform-backup platform-backup-manual-1 -n platform-db
+kubectl logs -n platform-db job/platform-backup-manual-1 -c dump
+kubectl logs -n platform-db job/platform-backup-manual-1 -c export
+kubectl delete job platform-backup-manual-1 -n platform-db      # 확인 후 정리
+```
+
+`export` 로그의 마지막 줄이 `DONE — nas/platform-backups/<id> 검증 완료`면 반출과 사본 checksum 재검증까지 성공한 것입니다. §12에 기록을 남기세요.

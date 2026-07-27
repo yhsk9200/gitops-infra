@@ -70,6 +70,47 @@ spec:
             summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} 잔여 공간 10% 미만"
             description: "단일 노드 local-path 환경이므로 노드 디스크 고갈로 직결됩니다. 보존 기간/이미지 정리를 검토하세요."
 
+    - name: platform.backup
+      # 백업 자동화(in-cluster CronJob, 런북 §14)의 실패 감지. 조용히 실패하는
+      # 백업은 없는 백업보다 나쁘다 — 있다고 믿게 만들기 때문이다.
+      #
+      # 핵심 룰은 실패 이벤트가 아니라 **staleness**다. 잡 실패·CronJob suspend·
+      # 스케줄러 이상·02:00에 클러스터가 죽어 있던 경우까지 한 룰로 잡히고,
+      # backoffLimit 재시도가 최종 성공하는 경우에 헛발화하지 않는다.
+      rules:
+        - alert: PlatformBackupStale
+          expr: (time() - kube_cronjob_status_last_successful_time{namespace="platform-db", cronjob="platform-backup"}) > 36 * 3600
+          for: 30m
+          labels:
+            severity: critical
+          annotations:
+            summary: "플랫폼 백업이 36시간 이상 성공하지 못했습니다"
+            description: "일 1회 스케줄인데 마지막 성공이 36시간을 넘었습니다. Job 로그를 확인하세요: kubectl get jobs -n platform-db | grep platform-backup. NAS(MinIO) 도달성·자격증명 만료도 함께 점검하세요."
+
+        - alert: PlatformBackupMissing
+          # 메트릭 자체가 없는 경우 — CronJob이 삭제됐거나 한 번도 성공하지 못했다.
+          # staleness 룰은 series가 없으면 발화하지 않으므로 별도로 잡는다.
+          expr: absent(kube_cronjob_status_last_successful_time{namespace="platform-db", cronjob="platform-backup"})
+          # 26h — 일 1회 스케줄을 한 번 놓친 뒤에야 발화한다. 최초 설정(자격증명
+          # 발급) 중이거나 재구축 직후에 헛발화하지 않도록 여유를 둔 값이다.
+          for: 26h
+          labels:
+            severity: critical
+          annotations:
+            summary: "플랫폼 백업 CronJob의 성공 이력이 없습니다"
+            description: "CronJob이 삭제·suspend되었거나 최초 실행이 아직 성공하지 못했습니다(런북 §14 최초 설정 확인)."
+
+        - alert: PlatformBackupJobFailing
+          # CronJob이 만드는 Job 이름은 platform-backup-<epoch> 형태로 결정적이라
+          # kube_job_owner 조인 없이 이름 패턴으로 좁힐 수 있다.
+          expr: max_over_time(kube_job_status_failed{namespace="platform-db", job_name=~"platform-backup-.*"}[6h]) > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "플랫폼 백업 Job에서 실패한 파드가 있습니다"
+            description: "재시도로 최종 성공했을 수 있으나 원인을 확인하세요(덤프 실패 / NAS 반출 실패 / checksum 불일치). 최종 실패는 PlatformBackupStale이 별도로 잡습니다."
+
     - name: platform.scrape
       rules:
         - alert: PlatformTargetDown

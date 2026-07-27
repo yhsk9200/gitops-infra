@@ -1,0 +1,212 @@
+# =============================================================================
+# 플랫폼 백업 자동화 — in-cluster CronJob → MinIO@NAS
+# =============================================================================
+# 왜 in-cluster인가 (검토한 대안):
+#
+# | 위치 | 기각/채택 사유 |
+# |---|---|
+# | k3s 노드 cron | 노드 디스크에 백업을 쌓으면 **노드 소실이라는 지배적 실패 모드에서
+# |               | 백업이 함께 사라진다**. 단일 노드(ADR-0002)에서 가장 나쁜 선택 |
+# | 운영자 PC(Mac) | 오프노드지만 Mac은 간헐 가동이 전제다(ADR-0009). 플랫폼의 백업
+# |               | 주기가 실험 플레인 가동에 의존하게 되어 경계를 역행한다 |
+# | **in-cluster CronJob (채택)** | 파드가 ephemeral이라 노드 디스크에 아무것도 남기지
+# |               | 않고 곧바로 오프노드(NAS)로 반출한다. cluster→NAS 경로는 MLflow가
+# |               | 이미 쓰는 tailnet 경로라 새 신뢰 관계가 아니다 |
+#
+# 이 CronJob은 `scripts/platform-backup.sh`(운영자 PC용, kubectl 경유)를 대체하지
+# 않는다. 둘은 실패 프로필이 다른 두 경로다 — 자동은 클러스터가 살아 있을 때 매일,
+# 수동은 클러스터 API에 닿을 수 있으면 언제든. 런북 §2·§3·§7 참조.
+#
+# API 접근이 필요 없는 잡이라 서비스어카운트 토큰을 마운트하지 않는다. postgres에는
+# kubectl exec 대신 Service로 직접 붙으므로 exec 권한도 필요 없다.
+#
+# 검증 경계: 반출 후 NAS 사본을 되받아 checksum을 재검증한다(런북 §7의 4단계).
+# minio/mc 이미지에 sha256sum이 있어 별도 이미지 없이 가능하다(실측 확인).
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: platform-backup-scripts
+  namespace: platform-db
+  labels:
+    app.kubernetes.io/name: platform-backup
+    app.kubernetes.io/part-of: platform-infra
+data:
+  dump.sh: |
+    #!/bin/bash
+    # DB 덤프 + 아카이브 유효성 검증 + manifest + checksum 생성.
+    # 대상 DB가 하나라도 실패하면 hard fail — 조용히 커버리지를 잃는 초록색 실행이
+    # 시끄러운 실패보다 나쁘다(수동 스크립트와 동일 원칙).
+    set -euo pipefail
+
+    ID="$(date +%Y%m%d-%H%M%S)"
+    SET="/work/$ID"
+    mkdir -p "$SET/postgres" "$SET/gitops"
+    echo "$ID" > /work/BACKUP_ID
+    echo "[dump] backup set: $SET"
+
+    for db in $BACKUP_DBS; do
+      echo "[dump] dumping $db ..."
+      DUMP="$SET/postgres/${db}.dump"
+      pg_dump -h "$PGHOST" -p "${PGPORT:-5432}" -U "$PGUSER" -d "$db" -Fc > "$DUMP"
+      [ -s "$DUMP" ] || { echo "[dump:ERROR] empty dump: $db" >&2; exit 1; }
+      pg_restore --list "$DUMP" > /dev/null \
+        || { echo "[dump:ERROR] not a readable archive: $db" >&2; exit 1; }
+      echo "[dump] ok: $db ($(du -h "$DUMP" | cut -f1))"
+    done
+
+    # 자동 경로는 레포 체크아웃이 없어 정확한 commit을 적을 수 없다. 세트 구조(런북
+    # §4)는 유지하고, 대응하는 커밋을 찾는 방법을 파일 안에 남긴다.
+    cat > "$SET/gitops/commit.txt" <<EOF
+    unavailable (in-cluster automated run — no repo checkout)
+    resolve with: git log --before="$(date -Iseconds)" -1 --format=%H
+    or check the ArgoCD root Application revision at that time.
+    EOF
+
+    {
+      echo "backup_id: \"$ID\""
+      echo "created_at: \"$(date -Iseconds)\""
+      echo "cluster: \"platform-infra\""
+      echo "mode: \"in-cluster-auto-with-nas-export\""
+      echo "targets:"
+      for db in $BACKUP_DBS; do
+        echo "  ${db}:"
+        echo "    host: \"$PGHOST\""
+        echo "    file: \"postgres/${db}.dump\""
+        echo "    method: \"pg_dump -Fc\""
+      done
+      echo "notes:"
+      echo "  - \"sealed-secrets controller key is NOT in this set (reseal-primary recovery).\""
+      echo "  - \"MLflow artifacts live on MinIO@NAS, out of scope (ADR-0008).\""
+      echo "  - \"git commit unavailable in the automated path — see gitops/commit.txt.\""
+    } > "$SET/manifest.yaml"
+
+    ( cd "$SET" && find . -type f ! -name checksums.sha256 -print0 \
+        | sort -z | xargs -0 sha256sum > checksums.sha256 )
+    ( cd "$SET" && sha256sum -c checksums.sha256 > /dev/null ) \
+      || { echo "[dump:ERROR] checksum verification failed" >&2; exit 1; }
+    echo "[dump] checksums verified — set ready: $ID"
+
+  export.sh: |
+    #!/bin/sh
+    # NAS(MinIO) 반출 + 사본 checksum 재검증(런북 §7-4).
+    # mc 이미지에는 find/xargs/grep이 없다 — sha256sum -c 만으로 검증이 성립하도록
+    # 세트 루트에서 실행한다.
+    set -eu
+
+    ID="$(cat /work/BACKUP_ID)"
+    SRC="/work/$ID"
+    MC="mc --config-dir /tmp/mc"
+
+    # URL에 자격증명을 끼워넣지 않는다 — 시크릿에 /·+·= 가 있으면 URL이 깨진다.
+    $MC alias set nas "$MINIO_ENDPOINT" "$ACCESS_KEY" "$SECRET_KEY" > /dev/null
+    $MC mb --ignore-existing "nas/$MINIO_BUCKET" > /dev/null
+    echo "[export] uploading $ID → nas/$MINIO_BUCKET/$ID"
+    $MC mirror --quiet "$SRC" "nas/$MINIO_BUCKET/$ID"
+
+    echo "[export] verifying NAS copy (re-download + checksum)"
+    $MC mirror --quiet "nas/$MINIO_BUCKET/$ID" "/verify/$ID"
+    cd "/verify/$ID"
+    sha256sum -c checksums.sha256 > /dev/null \
+      || { echo "[export:ERROR] NAS 사본 checksum 불일치" >&2; exit 1; }
+    echo "[export] DONE — nas/$MINIO_BUCKET/$ID 검증 완료"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: platform-backup
+  namespace: platform-db
+  labels:
+    app.kubernetes.io/name: platform-backup
+    app.kubernetes.io/part-of: platform-infra
+spec:
+  # 02:00 KST(17:00 UTC) — forecast 학습(0/6/12/18 UTC)과 겹치지 않는 시각.
+  schedule: "0 17 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: platform-backup
+            app.kubernetes.io/part-of: platform-infra
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            fsGroup: 1001
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: work
+              emptyDir: {}
+            - name: verify
+              emptyDir: {}
+            - name: scripts
+              configMap:
+                name: platform-backup-scripts
+                defaultMode: 0555
+          initContainers:
+            # postgres 서버와 같은 이미지 — pg_dump 메이저 버전을 서버와 맞춘다.
+            - name: dump
+              image: docker.io/bitnamilegacy/postgresql:17.6.0-debian-12-r4
+              command: ["/scripts/dump.sh"]
+              env:
+                - name: PGHOST
+                  value: platform-db-postgres-postgresql.platform-db.svc.cluster.local
+                - name: PGUSER
+                  value: postgres
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-db-secret
+                      key: postgres-password
+                - name: BACKUP_DBS
+                  value: "keycloak_db mlflow_db"
+              volumeMounts:
+                - { name: work, mountPath: /work }
+                - { name: scripts, mountPath: /scripts }
+              resources:
+                requests: { cpu: 100m, memory: 128Mi }
+                limits: { cpu: 500m, memory: 512Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: { drop: ["ALL"] }
+          containers:
+            - name: export
+              image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+              command: ["/scripts/export.sh"]
+              env:
+                # NAS tailnet 주소 — MLflow가 아티팩트를 쓰는 것과 같은 엔드포인트.
+                # 파드 이그레스가 노드 tailscaled를 경유한다(비밀 아님, git 평문).
+                - name: MINIO_ENDPOINT
+                  value: http://100.69.142.125:9000
+                - name: MINIO_BUCKET
+                  value: platform-backups
+                - name: ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: platform-backup-nas-secret
+                      key: ACCESS_KEY
+                - name: SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: platform-backup-nas-secret
+                      key: SECRET_KEY
+              volumeMounts:
+                - { name: work, mountPath: /work }
+                - { name: verify, mountPath: /verify }
+                - { name: scripts, mountPath: /scripts }
+              resources:
+                requests: { cpu: 50m, memory: 64Mi }
+                limits: { cpu: 300m, memory: 256Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: { drop: ["ALL"] }
