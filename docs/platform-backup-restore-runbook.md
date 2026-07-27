@@ -301,62 +301,35 @@ API 접근이 필요 없어 서비스어카운트 토큰을 마운트하지 않�
 
 ### 최초 설정 (운영자 직접 — 시크릿 경계)
 
-**1. MinIO에 백업 전용 사용자·버킷 만들기.** NAS의 MinIO 콘솔 또는 `mc`(컨테이너)로 수행합니다. 루트 자격증명으로 만든 access key는 루트 권한을 상속하므로, **버킷 범위로 제한한 전용 사용자**를 씁니다.
+`scripts/setup-backup-nas-credentials.sh` 한 번으로 버킷·최소권한 정책·전용 사용자·SealedSecret이 만들어집니다. **터미널에서 직접 실행하세요** — 비밀번호 입력에 TTY가 필요합니다.
 
 ```bash
-# mc는 컨테이너로 실행 (Apple Silicon 네이티브 바이너리 크래시 이력 — tailnet-minio-runbook 참조)
-MC="docker run --rm -it -v $HOME/.mc:/root/.mc minio/mc:RELEASE.2025-08-13T08-35-41Z"
+export KUBECONFIG=~/.kube/oci-platform-tailnet.yaml
 
-# 루트로 alias 설정 (비밀번호는 프롬프트 입력)
-$MC alias set nasroot http://100.69.142.125:9000 '<MinIO 루트 계정>'
-
-$MC mb --ignore-existing nasroot/platform-backups
-
-# 이 버킷에만 읽기·쓰기를 허용하는 정책 (읽기는 반출 후 재검증에 필요)
-cat > /tmp/platform-backup-policy.json <<'JSON'
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    { "Effect": "Allow", "Action": ["s3:ListBucket","s3:GetBucketLocation"],
-      "Resource": ["arn:aws:s3:::platform-backups"] },
-    { "Effect": "Allow", "Action": ["s3:PutObject","s3:GetObject"],
-      "Resource": ["arn:aws:s3:::platform-backups/*"] }
-  ]
-}
-JSON
-$MC admin policy create nasroot platform-backup-rw /tmp/platform-backup-policy.json
-$MC admin user add nasroot platform-backup            # 비밀번호는 강한 값으로 직접 생성
-$MC admin policy attach nasroot platform-backup-rw --user platform-backup
-
-# 동작 확인 — 이 사용자로 업로드·조회가 되고 다른 버킷은 막혀야 정상
-$MC alias set nasbackup http://100.69.142.125:9000 platform-backup
-$MC ls nasbackup/platform-backups && echo "OK"
+./scripts/setup-backup-nas-credentials.sh --preflight   # 변경 없이 사전 점검만
+./scripts/setup-backup-nas-credentials.sh               # 실제 실행
 ```
 
-> 삭제 권한(`s3:DeleteObject`)을 주지 않습니다 — 백업 주체가 백업을 지울 수 없어야 합니다. NAS 보존 정리는 별도 관심사입니다.
+MinIO 루트 비밀번호를 한 번 물어보는 것이 유일한 입력입니다. 스크립트가 하는 일:
 
-**2. SealedSecret 생성.** 컨트롤러 공개키를 먼저 받아두는 레포 관례를 따릅니다(`cluster-rebuild-runbook.md` 3.3).
+1. 사전 점검(도구·클러스터·sealed-secrets 컨트롤러·MinIO 도달성)
+2. 버킷 `platform-backups` 생성(있으면 재사용)
+3. **최소권한 정책** — 이 버킷에만 `ListBucket`/`GetObject`/`PutObject`. **`DeleteObject`는 주지 않습니다** — 백업 주체가 백업을 지울 수 없어야 합니다. 읽기 권한은 반출 후 checksum 재검증에 필요합니다.
+4. 전용 사용자 `platform-backup` 생성 + 정책 연결 (비밀번호는 스크립트가 생성)
+5. **권한 검증** — 조회·쓰기·읽기가 되는지, **삭제가 막히는지**, **다른 버킷(`mlflow-artifacts`)이 차단되는지**까지 실제로 시험합니다. 의도와 다르면 경고합니다.
+6. SealedSecret을 `manifests/security/platform-backup-nas-sealed-secret.yaml`로 생성
 
-```bash
-kubeseal --fetch-cert \
-  --controller-name=sealed-secrets-controller \
-  --controller-namespace=platform-system \
-  > pub-cert.pem
+비밀값이 남는 곳을 최소화하도록 설계했습니다 — 생성된 비밀번호를 화면에 찍지 않고, 명령행 인자로도 넘기지 않으며(호스트 `ps` 노출 방지: 컨테이너에는 환경변수, `kubectl`에는 파일로 전달), 평문은 `~/platform-backup-nas.secret`(권한 600) 한 파일에만 기록합니다. 그래서 **AI 에이전트가 이 스크립트를 대신 실행하더라도 비밀값이 대화 기록에 들어가지 않습니다.**
 
-kubectl create secret generic platform-backup-nas-secret \
-  --namespace=platform-db \
-  --from-literal=ACCESS_KEY='platform-backup' \
-  --from-literal=SECRET_KEY='<위에서 만든 비밀번호>' \
-  --dry-run=client -o yaml \
-  | kubeseal --cert pub-cert.pem --format yaml \
-  > manifests/security/platform-backup-nas-sealed-secret.yaml
-```
+**실행 후 반드시**:
 
-> 셸 변수에 의존하지 말고 값을 직접 타이핑하거나 `read -rs`로 받으세요 — 2026-07-19에 다른 셸의 빈 변수가 그대로 봉인되어 CrashLoop이 난 사고가 있었습니다(`platform-mlops-setup.md` 참조).
+1. `~/platform-backup-nas.secret`의 값을 **패스워드 매니저에 저장** — 이 플랫폼은 컨트롤러 키를 백업하지 않는 대신 "평문으로 재봉인"을 기본 복구 경로로 삼으므로(§6), 사람이 이 값을 보관해야 재구축이 가능합니다.
+2. 저장을 확인했으면 파일 삭제: `rm -P ~/platform-backup-nas.secret`
+3. SealedSecret 커밋·머지 → ArgoCD가 Secret(wave -1)과 CronJob(wave 5)을 동기합니다.
 
-**3. 커밋·머지** → ArgoCD가 SealedSecret(wave -1)과 CronJob(wave 5)을 동기합니다.
+> 기존 사용자의 비밀번호를 교체하려면 `ROTATE=1`을 붙입니다. 새 SealedSecret이 배포되기 전까지 백업 잡이 실패하므로 의도적으로 기본 동작에서 제외했습니다.
 
-**4. 첫 실행을 스케줄까지 기다리지 말고 수동 검증**:
+**첫 실행은 스케줄(02:00 KST)까지 기다리지 말고 수동 검증**:
 
 ```bash
 kubectl create job --from=cronjob/platform-backup platform-backup-manual-1 -n platform-db
